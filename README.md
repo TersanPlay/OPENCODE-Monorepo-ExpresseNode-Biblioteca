@@ -290,13 +290,14 @@ Cadastrar livro → cadastrar leitor → realizar empréstimo → gerar Termo de
   cadastrados são criados automaticamente ao salvar, reaproveitando o autor
   existente quando o nome bate ignorando maiúsculas
 - Livros possuem campos expandidos: volume, CDD, cutter, localização física, cópias disponíveis, tipo de aquisição
-- Exclusão de leitores com anonimização LGPD (ADMIN apenas): dados pessoais substituídos, empréstimos ativos bloqueiam exclusão
-- Termos de empréstimo/devolução: PDFs gerados dinamicamente com snapshots, acessíveis pelo histórico do leitor
-- Devolução com registro de condição do material (BOM/REGULAR/DANIFICADO) e observações
+- Exclusão de leitores com anonimização LGPD (ADMIN apenas): dados pessoais substituídos (senha e assinatura apagadas); com empréstimos ativos, a exclusão é recusada (`409`)
+- Termos de empréstimo/devolução: PDFs gerados dinamicamente com snapshots e assinatura digital incorporada, acessíveis pelo histórico do leitor e pelo portal
+- Assinatura do leitor: pad obrigatório no empréstimo/devolução, salva reaproveitável, exigida antes de concluir
+- Portal do leitor (`/cadastro`, `/minha-conta`): autocadastro, login isolado, empréstimos, reservas e dados próprios
+- Categorias em taxonomia canônica de 39 itens (automação em `scripts/review-categories/`)
+- Devolução com registro de condição do material (BOM/REGULAR/DANIFICADO) e observações/ocorrências
 - Backups: download de arquivos existentes, restauração a partir de arquivo local do computador
-- Termos de Empréstimo/Devolução: geração de PDFs profissionais com snapshots dos dados, acessíveis pela página do leitor
-- Devolução com condição do material (BOM/REGULAR/DANIFICADO) e observações/ocorrências
-- Toda operação registra o usuário responsável (auditoria)
+- Toda operação registra o usuário responsável (auditoria; fluxos self/automáticos usam `null`)
 
 ## Testes
 
@@ -318,4 +319,4 @@ pnpm build
 - Buscas textuais no SQLite (Prisma `contains`) são case-sensitive; CPFs, códigos e números devem ser digitados conforme cadastrados.
 - Senhas com bcryptjs (API compatível com bcrypt, sem dependência nativa no Windows).
 - A comparação de nomes de autores para reaproveitamento ignora maiúsculas (feita em memória, no backend).
-- SQLite não suporta enums do Prisma: campos como `format` e `acquisitionType` são validados por Zod na borda da API e armazenados como String.
+- SQLite não suporta enums do Prisma: campos como `acquisitionType` são validados por Zod na borda da API e armazenados como String.

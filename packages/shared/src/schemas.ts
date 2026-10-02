@@ -239,6 +239,14 @@ export const loanReturnSchema = z.object({
   useSavedSignature: z.boolean().optional(),
 });
 
+export const loanReturnBatchSchema = z.object({
+  loanIds: z.array(z.number().int()).min(1, 'Selecione ao menos um empréstimo').max(20, 'Máximo de 20 por operação'),
+  condition: z.enum(['BOM', 'REGULAR', 'DANIFICADO']).optional(),
+  observations: z.string().trim().max(500).optional(),
+  signature: signatureDataUrl,
+  useSavedSignature: z.boolean().optional(),
+});
+
 export const readerSignatureSchema = z.object({
   signature: z
     .string()
@@ -246,6 +254,11 @@ export const readerSignatureSchema = z.object({
     .min(1, 'Assinatura obrigatória')
     .max(700000, 'Assinatura muito grande')
     .refine((v) => /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(v), 'Assinatura inválida'),
+});
+
+// Assinatura da equipe: define, substitui ou remove (null) — opcional no fluxo.
+export const userSignatureSchema = z.object({
+  signature: signatureDataUrl,
 });
 
 export const reservationCreateSchema = z.object({
@@ -321,6 +334,7 @@ export const userQuerySchema = paginationSchema.extend({
 export const reportQuerySchema = z.object({
   type: z.enum([
     'acervo',
+    'acervo-livros',
     'available',
     'loaned',
     'overdue',
@@ -336,6 +350,7 @@ export const reportQuerySchema = z.object({
   bookId: intOpt,
   readerId: intOpt,
   limit: z.coerce.number().int().min(1).max(100).default(10),
+  page: z.coerce.number().int().min(1).default(1),
 });
 
 export function dateOrNull(value: string | null | undefined): Date | undefined {

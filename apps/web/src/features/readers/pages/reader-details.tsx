@@ -1,12 +1,13 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Ban, CheckCircle2, FileText, KeyRound, Mail, MapPin, Pencil, Phone, UserCheck, UserRound, UserX } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Select } from '../../../components/ui/select';
 import { Card, CardContent } from '../../../components/ui/card';
 import { ConfirmDialog } from '../../../components/ui/confirm-dialog';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { Pagination } from '../../../components/ui/pagination';
 import { PageSkeleton } from '../../../components/ui/skeleton';
 import { ReservationStatusBadge, LoanStatusBadge, ReaderStatusBadge } from '../../../components/ui/status-badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
@@ -48,6 +49,13 @@ export function ReaderDetailsPage() {
   const [deleteReason, setDeleteReason] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
+  const [loansPage, setLoansPage] = useState(1);
+  const [resPage, setResPage] = useState(1);
+
+  useEffect(() => {
+    setLoansPage(1);
+    setResPage(1);
+  }, [readerId]);
   const { toast } = useApiToast();
   const navigate = useNavigate();
 
@@ -65,6 +73,14 @@ export function ReaderDetailsPage() {
   }
 
   const { reader } = data;
+
+  const PAGE_SIZE = 10;
+  const loansTotalPages = Math.max(1, Math.ceil(data.loans.length / PAGE_SIZE));
+  const resTotalPages = Math.max(1, Math.ceil(data.reservations.length / PAGE_SIZE));
+  const loansPageSafe = Math.min(loansPage, loansTotalPages);
+  const resPageSafe = Math.min(resPage, resTotalPages);
+  const loansShown = data.loans.slice((loansPageSafe - 1) * PAGE_SIZE, loansPageSafe * PAGE_SIZE);
+  const resShown = data.reservations.slice((resPageSafe - 1) * PAGE_SIZE, resPageSafe * PAGE_SIZE);
 
   const toggleBlock = async () => {
     setBusy(true);
@@ -236,11 +252,13 @@ export function ReaderDetailsPage() {
             <TabsList>
               <TabsTrigger value="loans">Histórico de empréstimos ({data.loans.length})</TabsTrigger>
               <TabsTrigger value="reservations">Reservas ({data.reservations.length})</TabsTrigger>
+              <TabsTrigger value="signature">Assinatura</TabsTrigger>
             </TabsList>
             <TabsContent value="loans">
               {data.loans.length === 0 ? (
                 <EmptyState compact title="Nenhum empréstimo ainda" />
               ) : (
+                <>
                 <Table>
                   <THead>
                     <TR>
@@ -253,7 +271,7 @@ export function ReaderDetailsPage() {
                     </TR>
                   </THead>
                   <TBody>
-                    {data.loans.map((l) => (
+                    {loansShown.map((l) => (
                       <TR key={l.id}>
                         <TD className="max-w-56 truncate font-semibold text-ink">{l.book?.title}</TD>
                         <TD className="text-muted">{formatDate(l.loanDate)}</TD>
@@ -286,12 +304,15 @@ export function ReaderDetailsPage() {
                     ))}
                   </TBody>
                 </Table>
+                <Pagination className="mt-4" page={loansPageSafe} totalPages={loansTotalPages} onPageChange={setLoansPage} />
+                </>
               )}
             </TabsContent>
             <TabsContent value="reservations">
               {data.reservations.length === 0 ? (
                 <EmptyState compact title="Nenhuma reserva" />
               ) : (
+                <>
                 <Table>
                   <THead>
                     <TR>
@@ -302,7 +323,7 @@ export function ReaderDetailsPage() {
                     </TR>
                   </THead>
                   <TBody>
-                    {data.reservations.map((r) => (
+                    {resShown.map((r) => (
                       <TR key={r.id}>
                         <TD className="max-w-56 truncate font-semibold text-ink">{r.book?.title}</TD>
                         <TD className="text-muted">{formatDate(r.createdAt)}</TD>
@@ -312,6 +333,26 @@ export function ReaderDetailsPage() {
                     ))}
                   </TBody>
                 </Table>
+                <Pagination className="mt-4" page={resPageSafe} totalPages={resTotalPages} onPageChange={setResPage} />
+                </>
+              )}
+            </TabsContent>
+            <TabsContent value="signature">
+              {data.reader.signature ? (
+                <div className="max-w-md">
+                  <img
+                    src={data.reader.signature}
+                    alt={`Assinatura de ${data.reader.name}`}
+                    className="h-28 w-full rounded-small border border-black/10 bg-white object-contain"
+                  />
+                  {data.reader.signatureUpdatedAt && (
+                    <p className="mt-2 text-[12px] text-muted">
+                      Registrada em {formatDate(data.reader.signatureUpdatedAt)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <EmptyState compact title="Nenhuma assinatura registrada" description="Este leitor ainda não possui assinatura no cadastro." />
               )}
             </TabsContent>
           </Tabs>

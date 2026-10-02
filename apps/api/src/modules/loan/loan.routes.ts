@@ -8,9 +8,9 @@ import { requireAuth } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
 import { computeDueDate, expireReservations, refreshOverdue } from '../../lib/overdue';
 import { getSettings } from '../../lib/settings';
-import { generateLoanTermPDF, generateReturnTermPDF } from '../../lib/terms';
+import { generateBatchReturnTermPDF, generateLoanTermPDF, generateReturnTermPDF } from '../../lib/terms';
 import { requireReader } from '../../lib/reader-auth';
-import { dateOrNull, loanBatchCreateSchema, loanCreateSchema, loanQuerySchema, loanReturnSchema, parse } from '../../validation';
+import { dateOrNull, listQuerySchema, loanBatchCreateSchema, loanCreateSchema, loanQuerySchema, loanReturnBatchSchema, loanReturnSchema, parse } from '../../validation';
 
 export const loanRouter = Router();
 
@@ -43,6 +43,101 @@ async function assertBookEligible(
   });
   if (reservation) throw new HttpError(400, `"${book.title}" possui reserva aguardando por outro leitor`);
   return { id: book.id, title: book.title };
+}
+
+interface ReturnInput {
+  condition?: string | null;
+  observations?: string | null;
+  signature?: string | null;
+  useSavedSignature?: boolean;
+  returnGroup?: string | null;
+}
+
+// Núcleo da devolução, reutilizado no unitário e no lote: valida, resolve
+// assinatura, grava retorno e ativa reserva. Auditoria e auto-block ficam no chamador.
+async function performReturn(
+  db: Prisma.TransactionClient | typeof prisma,
+  loan: { id: number; readerId: number; bookId: number; returnedAt: Date | null },
+  input: ReturnInput,
+  operator: { id: number; name: string },
+) {
+  if (loan.returnedAt) throw new HttpError(400, 'Empréstimo já devolvido');
+  const now = new Date();
+  let sig: string | null = input.signature ? input.signature : null;
+  if (sig) {
+    await db.reader.update({
+      where: { id: loan.readerId },
+      data: { signature: sig, signatureUpdatedAt: now },
+    });
+  } else if (input.useSavedSignature) {
+    const r = await db.reader.findUnique({ where: { id: loan.readerId } });
+    if (!r?.signature) throw new HttpError(400, 'Leitor não possui assinatura salva; assine no pad');
+    sig = r.signature;
+  }
+  const opSig = (await db.user.findUnique({ where: { id: operator.id }, select: { signature: true } }))?.signature ?? null;
+
+  const returned = await db.loan.update({
+    where: { id: loan.id },
+    data: {
+      returnedAt: now,
+      status: 'RETURNED',
+      returnCondition: input.condition ?? null,
+      returnObservations: input.observations ?? null,
+      receivedByNameSnapshot: operator.name,
+      returnSignature: sig,
+      returnSignedAt: sig ? now : null,
+      receivedBySignatureSnapshot: opSig,
+      returnGroup: input.returnGroup ?? null,
+    },
+  });
+
+  const pending = await db.reservation.findFirst({
+    where: { bookId: loan.bookId, status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (pending) {
+    const expired = pending.expiresAt && pending.expiresAt.getTime() < Date.now();
+    await db.reservation.update({
+      where: { id: pending.id },
+      data: { status: expired ? 'EXPIRED' : 'AVAILABLE' },
+    });
+  }
+  return returned;
+}
+
+async function applyAutoBlock(
+  db: Prisma.TransactionClient | typeof prisma,
+  readerId: number,
+  ip: string | undefined,
+) {
+  const overdueCount = await db.loan.count({
+    where: { readerId, status: 'OVERDUE' },
+  });
+  if (overdueCount >= 2) {
+    const reader = await db.reader.findUnique({ where: { id: readerId } });
+    if (reader && reader.status === 'ACTIVE') {
+      await db.reader.update({
+        where: { id: readerId },
+        data: {
+          status: 'BLOCKED',
+          blockCategory: 'ATRASO_REPETIDO',
+          blockReason: 'Bloqueado automaticamente por atrasos repetidos',
+          blockedAt: new Date(),
+          blockedBy: null,
+        },
+      });
+      await db.reservation.updateMany({
+        where: { readerId, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
+      await writeAudit(null, 'READER_STATUS_CHANGED', 'Reader', readerId, {
+        status: 'BLOCKED',
+        reason: 'Bloqueado automaticamente por atrasos repetidos',
+        category: 'ATRASO_REPETIDO',
+        auto: true,
+      }, ip);
+    }
+  }
 }
 
 // Termos: equipe (qualquer empréstimo) ou o próprio leitor dono do empréstimo.
@@ -223,6 +318,7 @@ loanRouter.post(
 
       const snapshots = await buildLoanSnapshots(tx, reader.id, data.bookId, userId);
       const sig = await resolveLoanSignature(tx, reader.id, data);
+      const opSig = (await tx.user.findUnique({ where: { id: userId }, select: { signature: true } }))?.signature ?? null;
 
       const created = await tx.loan.create({
         data: {
@@ -234,6 +330,7 @@ loanRouter.post(
           ...snapshots,
           loanSignature: sig,
           loanSignedAt: sig ? loanDate : null,
+          createdBySignatureSnapshot: opSig,
         },
       });
       const number = await ensureNumber(created.id, tx);
@@ -288,6 +385,7 @@ loanRouter.post(
 
       const loans: { id: number; number: string; bookId: number }[] = [];
       const batchSig = await resolveLoanSignature(tx, reader.id, data);
+      const batchOpSig = (await tx.user.findUnique({ where: { id: userId }, select: { signature: true } }))?.signature ?? null;
       for (const bookId of bookIds) {
         await assertBookEligible(tx, bookId, reader.id);
         const snapshots = await buildLoanSnapshots(tx, reader.id, bookId, userId);
@@ -301,6 +399,7 @@ loanRouter.post(
             ...snapshots,
             loanSignature: batchSig,
             loanSignedAt: batchSig ? loanDate : null,
+            createdBySignatureSnapshot: batchOpSig,
           },
         });
         const number = await ensureNumber(createdLoan.id, tx);
@@ -341,76 +440,102 @@ loanRouter.post(
     const data = req.body && Object.keys(req.body).length > 0 ? parse(loanReturnSchema, req.body) : {};
     const loan = await prisma.loan.findUnique({ where: { id } });
     if (!loan) throw new HttpError(404, 'Empréstimo não encontrado');
-    if (loan.returnedAt) throw new HttpError(400, 'Empréstimo já devolvido');
 
-    let sig: string | null = data.signature ? data.signature : null;
-    if (sig) {
-      await prisma.reader.update({
-        where: { id: loan.readerId },
-        data: { signature: sig, signatureUpdatedAt: new Date() },
-      });
-    } else if (data.useSavedSignature) {
-      const r = await prisma.reader.findUnique({ where: { id: loan.readerId } });
-      if (!r?.signature) throw new HttpError(400, 'Leitor não possui assinatura salva; assine no pad');
-      sig = r.signature;
-    }
-
-    const returned = await prisma.loan.update({
-      where: { id },
-      data: {
-        returnedAt: new Date(),
-        status: 'RETURNED',
-        returnCondition: data.condition ?? null,
-        returnObservations: data.observations ?? null,
-        receivedByNameSnapshot: req.user!.name,
-        returnSignature: sig,
-        returnSignedAt: sig ? new Date() : null,
-      },
-    });
-
-    const pending = await prisma.reservation.findFirst({
-      where: { bookId: loan.bookId, status: 'PENDING' },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (pending) {
-      const expired = pending.expiresAt && pending.expiresAt.getTime() < Date.now();
-      await prisma.reservation.update({
-        where: { id: pending.id },
-        data: { status: expired ? 'EXPIRED' : 'AVAILABLE' },
-      });
-    }
-
-    const overdueCount = await prisma.loan.count({
-      where: { readerId: loan.readerId, status: 'OVERDUE' },
-    });
-    if (overdueCount >= 2) {
-      const reader = await prisma.reader.findUnique({ where: { id: loan.readerId } });
-      if (reader && reader.status === 'ACTIVE') {
-        await prisma.reader.update({
-          where: { id: loan.readerId },
-          data: {
-            status: 'BLOCKED',
-            blockCategory: 'ATRASO_REPETIDO',
-            blockReason: 'Bloqueado automaticamente por atrasos repetidos',
-            blockedAt: new Date(),
-            blockedBy: null,
-          },
-        });
-        await prisma.reservation.updateMany({
-          where: { readerId: loan.readerId, status: 'PENDING' },
-          data: { status: 'CANCELLED' },
-        });
-        await writeAudit(null, 'READER_STATUS_CHANGED', 'Reader', loan.readerId, {
-          status: 'BLOCKED',
-          reason: 'Bloqueado automaticamente por atrasos repetidos',
-          category: 'ATRASO_REPETIDO',
-          auto: true,
-        }, req.ip);
-      }
-    }
+    const returned = await performReturn(prisma, loan, data, { id: req.user!.id, name: req.user!.name });
+    await applyAutoBlock(prisma, loan.readerId, req.ip);
 
     await writeAudit(req.user?.id, 'LOAN_RETURNED', 'Loan', id, { number: loan.number }, req.ip);
     res.json({ ...returned, number: loan.number });
+  }),
+);
+
+loanRouter.post(
+  '/returns/batch',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const data = parse(loanReturnBatchSchema, req.body);
+    const userId = req.user!.id;
+    const opName = req.user!.name;
+
+    const ids = [...new Set(data.loanIds)];
+    if (ids.length !== data.loanIds.length) throw new HttpError(400, 'Empréstimo duplicado na seleção');
+    const found = await prisma.loan.findMany({ where: { id: { in: ids } } });
+    if (found.length !== ids.length) throw new HttpError(404, 'Empréstimo não encontrado');
+    const readerIds = new Set(found.map((l) => l.readerId));
+    if (readerIds.size !== 1) throw new HttpError(400, 'O lote deve conter empréstimos de um único leitor');
+
+    const group = `DEV-${String(Math.min(...ids)).padStart(6, '0')}`;
+    const ordered = [...found].sort((a, b) => a.id - b.id);
+    const returned = await prisma.$transaction(async (tx) => {
+      const out = [];
+      for (const loan of ordered) {
+        out.push(await performReturn(tx, loan, { ...data, returnGroup: group }, { id: userId, name: opName }));
+      }
+      return out;
+    });
+    await applyAutoBlock(prisma, found[0].readerId, req.ip);
+
+    for (const l of returned) {
+      await writeAudit(userId, 'LOAN_RETURNED', 'Loan', l.id, { number: l.number, group }, req.ip);
+    }
+
+    const full = await prisma.loan.findMany({
+      where: { id: { in: ids } },
+      include: loanInclude,
+      orderBy: { createdAt: 'asc' },
+    });
+    res.status(200).json({ items: full, count: full.length, group });
+  }),
+);
+
+loanRouter.get(
+  '/returns/pending',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const q = parse(listQuerySchema, req.query);
+    const search = typeof q.search === 'string' ? q.search.trim() : '';
+    const loanWhere: Prisma.LoanWhereInput = {
+      status: { in: ['ACTIVE', 'OVERDUE'] },
+      ...(search
+        ? {
+            OR: [
+              { reader: { name: { contains: search } } },
+              { reader: { cpf: { contains: search } } },
+              { book: { title: { contains: search } } },
+            ],
+          }
+        : {}),
+    };
+    const idRows = await prisma.loan.findMany({
+      where: loanWhere,
+      select: { readerId: true },
+      distinct: ['readerId'],
+      orderBy: { readerId: 'asc' },
+    });
+    const total = idRows.length;
+    const pageIds = idRows.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map((r) => r.readerId);
+    const loans = pageIds.length > 0
+      ? await prisma.loan.findMany({
+          where: { ...loanWhere, readerId: { in: pageIds } },
+          include: { reader: true, book: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      : [];
+    const groups = new Map<number, { reader: (typeof loans)[number]['reader']; loans: typeof loans }>();
+    for (const l of loans) {
+      const g = groups.get(l.readerId) ?? { reader: l.reader, loans: [] };
+      g.loans.push(l);
+      groups.set(l.readerId, g);
+    }
+    const items = [...groups.values()]
+      .map((g) => ({
+        reader: g.reader,
+        loans: g.loans,
+        activeCount: g.loans.length,
+        overdueCount: g.loans.filter((l) => l.status === 'OVERDUE').length,
+      }))
+      .sort((a, b) => a.reader.name.localeCompare(b.reader.name));
+    res.json({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.ceil(total / q.pageSize) });
   }),
 );
 
@@ -460,6 +585,48 @@ loanRouter.get(
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="termo-emprestimo-${loan.number || `EMP-${String(loan.id).padStart(6, '0')}`}.pdf"`);
     const doc = generateLoanTermPDF(loan as any, settings);
+    doc.pipe(res);
+    doc.end();
+  }),
+);
+
+loanRouter.get(
+  '/return-term/batch/:group',
+  asyncHandler(async (req, res, next) => {
+    const header = req.headers.authorization;
+    const staffToken = header?.startsWith('Bearer ') ? header.slice(7) : null;
+    let staffOk = false;
+    if (staffToken) {
+      await new Promise<void>((resolve) => {
+        (requireAuth as RequestHandler)(req, res, () => resolve());
+      });
+      staffOk = !!req.user;
+    }
+    if (!staffOk) {
+      await new Promise<void>((resolve) => {
+        (requireReader as RequestHandler)(req, res, () => resolve());
+      });
+      if (!req.reader) return next(new HttpError(401, 'Não autenticado'));
+      const owned = await prisma.loan.count({
+        where: { returnGroup: req.params.group, readerId: req.reader.id },
+      });
+      if (owned === 0) return next(new HttpError(403, 'Sem permissão para este documento'));
+      return next();
+    }
+    return next();
+  }),
+  asyncHandler(async (req, res) => {
+    const loans = await prisma.loan.findMany({
+      where: { returnGroup: req.params.group },
+      include: { reader: true, book: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (loans.length === 0) throw new HttpError(404, 'Termo não encontrado');
+    if (loans.some((l) => !l.returnedAt)) throw new HttpError(404, 'Devolução ainda não concluída');
+    const settings = await getSettings();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="termo-devolucao-${req.params.group}.pdf"`);
+    const doc = generateBatchReturnTermPDF(loans as any, settings);
     doc.pipe(res);
     doc.end();
   }),

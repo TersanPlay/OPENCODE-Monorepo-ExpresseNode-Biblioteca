@@ -19,6 +19,7 @@ import {
   readerRegisterSchema,
   readerSelfPasswordSchema,
   readerSelfUpdateSchema,
+  readerSignatureSchema,
 } from '../../validation';
 
 export const readerAuthRouter = Router();
@@ -147,6 +148,41 @@ readerAuthRouter.put(
       },
     });
     await writeAudit(null, 'READER_UPDATED', 'Reader', id, { self: true }, req.ip);
+    res.json({ reader: publicReader(reader) });
+  }),
+);
+
+// --- Assinatura do próprio leitor: salva/substitui (somente a atual do perfil) ---
+readerAuthRouter.patch(
+  '/me/signature',
+  requireReader,
+  asyncHandler(async (req, res) => {
+    const id = req.reader!.id;
+    const data = parse(readerSignatureSchema, req.body);
+    const existing = await prisma.reader.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) throw new HttpError(404, 'Leitor nǜo encontrado');
+    const reader = await prisma.reader.update({
+      where: { id },
+      data: { signature: data.signature, signatureUpdatedAt: new Date() },
+    });
+    await writeAudit(null, 'READER_UPDATED', 'Reader', id, { self: true, signature: true }, req.ip);
+    res.json({ reader: publicReader(reader) });
+  }),
+);
+
+// --- Exclui a assinatura atual do perfil (n£o toca nas congeladas de empréstimos/devoluções) ---
+readerAuthRouter.delete(
+  '/me/signature',
+  requireReader,
+  asyncHandler(async (req, res) => {
+    const id = req.reader!.id;
+    const existing = await prisma.reader.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) throw new HttpError(404, 'Leitor nǜo encontrado');
+    const reader = await prisma.reader.update({
+      where: { id },
+      data: { signature: null, signatureUpdatedAt: null },
+    });
+    await writeAudit(null, 'READER_UPDATED', 'Reader', id, { self: true, signature: false }, req.ip);
     res.json({ reader: publicReader(reader) });
   }),
 );

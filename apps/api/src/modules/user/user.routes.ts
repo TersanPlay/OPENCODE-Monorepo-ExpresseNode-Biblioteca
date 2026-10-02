@@ -5,7 +5,7 @@ import { HttpError } from '../../lib/http-error';
 import { asyncHandler } from '../../middleware/async-handler';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
-import { parse, userCreateSchema, userQuerySchema, userUpdateSchema, resetPasswordSchema } from '../../validation';
+import { parse, userCreateSchema, userQuerySchema, userSignatureSchema, userUpdateSchema, resetPasswordSchema } from '../../validation';
 
 export const userRouter = Router();
 
@@ -23,7 +23,7 @@ userRouter.get(
     const total = await prisma.user.count({ where });
     const items = await prisma.user.findMany({
       where,
-      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, signature: true, signatureUpdatedAt: true },
       orderBy: { name: 'asc' },
       skip: (q.page - 1) * q.pageSize,
       take: q.pageSize,
@@ -47,7 +47,7 @@ userRouter.post(
       },
     });
     await writeAudit(req.user?.id, 'USER_CREATED', 'User', user.id, { email: user.email, role: user.role }, req.ip);
-    res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, status: user.status });
+    res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, status: user.status, signature: user.signature, signatureUpdatedAt: user.signatureUpdatedAt });
   }),
 );
 
@@ -57,7 +57,7 @@ userRouter.get(
     const id = Number(req.params.id);
     const user = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, updatedAt: true },
+      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, updatedAt: true, signature: true, signatureUpdatedAt: true },
     });
     if (!user) throw new HttpError(404, 'Usuário não encontrado');
     res.json(user);
@@ -88,7 +88,24 @@ userRouter.put(
       },
     });
     await writeAudit(req.user?.id, 'USER_UPDATED', 'User', id, { email: user.email, role: user.role }, req.ip);
-    res.json({ id: user.id, name: user.name, email: user.email, role: user.role, status: user.status });
+    res.json({ id: user.id, name: user.name, email: user.email, role: user.role, status: user.status, signature: user.signature, signatureUpdatedAt: user.signatureUpdatedAt });
+  }),
+);
+
+userRouter.patch(
+  '/:id/signature',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const data = parse(userSignatureSchema, req.body);
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, 'Usuário não encontrado');
+    const sig = data.signature ? data.signature : null;
+    const user = await prisma.user.update({
+      where: { id },
+      data: { signature: sig, signatureUpdatedAt: sig ? new Date() : null },
+    });
+    await writeAudit(req.user?.id, 'USER_UPDATED', 'User', id, { signature: !!sig }, req.ip);
+    res.json({ id: user.id, signature: user.signature, signatureUpdatedAt: user.signatureUpdatedAt });
   }),
 );
 

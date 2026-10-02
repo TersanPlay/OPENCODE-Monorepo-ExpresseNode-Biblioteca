@@ -19,8 +19,10 @@ import { ReaderDetailsPage } from '../../pages/admin/reader-details';
 import { LoansPage } from '../../pages/admin/loans';
 import { NewLoanPage } from '../../pages/admin/new-loan';
 import { ReturnsPage } from '../../pages/admin/returns';
+import { ReturnDetailPage } from '../../pages/admin/return-detail';
 import { ReservationsPage } from '../../pages/admin/reservations';
 import { ReportsPage } from '../../pages/admin/reports';
+import { LabelsPage } from '../../pages/admin/labels';
 import { UsersPage } from '../../pages/admin/users';
 import { SettingsPage } from '../../pages/admin/settings';
 import { AuditPage } from '../../pages/admin/audit';
@@ -50,9 +52,11 @@ export function AppRoutes() {
           <Route path="admin/livros" element={<BooksPage />} />
           <Route path="admin/livros/novo" element={<BookFormPage />} />
           <Route path="admin/livros/:id/editar" element={<BookFormPage />} />
+          <Route path="admin/etiquetas" element={<LabelsPage />} />
           <Route path="admin/emprestimos" element={<LoansPage />} />
           <Route path="admin/emprestimos/novo" element={<NewLoanPage />} />
           <Route path="admin/devolucoes" element={<ReturnsPage />} />
+          <Route path="admin/devolucoes/:readerId" element={<ReturnDetailPage />} />
           <Route path="admin/reservas" element={<ReservationsPage />} />
           <Route path="admin/leitores" element={<ReadersPage />} />
           <Route path="admin/leitores/:id" element={<ReaderDetailsPage />} />

@@ -32,6 +32,8 @@ export interface User {
   role: Role;
   status: Status;
   createdAt: string;
+  signature?: string | null;
+  signatureUpdatedAt?: string | null;
 }
 
 export interface Author {
@@ -149,6 +151,8 @@ export interface Loan {
   loanSignedAt?: string | null;
   returnSignature?: string | null;
   returnSignedAt?: string | null;
+  createdBySignatureSnapshot?: string | null;
+  receivedBySignatureSnapshot?: string | null;
   reader?: Reader;
   book?: Book;
   user?: { id: number; name: string };
@@ -214,10 +218,15 @@ export interface ReportResult {
   filters: Record<string, unknown>;
   columns: string[];
   rows: (string | number | null)[][];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
 }
 
 export type ReportType =
   | 'acervo'
+  | 'acervo-livros'
   | 'available'
   | 'loaned'
   | 'overdue'

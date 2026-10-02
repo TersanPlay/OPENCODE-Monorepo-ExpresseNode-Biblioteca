@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Search, UserCog } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { PenLine, Plus, Search, UserCog } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +20,7 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { UserStatusBadge } from '../../../components/ui/status-badge';
 import { TD, TH, TBody, THead, TR, Table } from '../../../components/ui/table';
 import { usersApi } from '../../api';
+import { SignaturePad, type SignaturePadHandle } from '../../loans/components/signature-pad';
 import { useAsyncData } from '../../hooks/use-async-data';
 import { useDebounce } from '../../hooks/use-debounce';
 import { useAuth } from '../../auth/auth-provider';
@@ -46,6 +47,9 @@ export function UsersPage() {
   const [editing, setEditing] = useState<User | null>(null);
   const [toggling, setToggling] = useState<User | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sigUser, setSigUser] = useState<User | null>(null);
+  const [sigBusy, setSigBusy] = useState(false);
+  const modalSigRef = useRef<SignaturePadHandle>(null);
   const { toast } = useApiToast();
   const { user: me } = useAuth();
 
@@ -64,6 +68,10 @@ export function UsersPage() {
     setEditing(u);
     reset({ name: u.name, email: u.email, password: '', role: u.role });
     setDialogOpen(true);
+  };
+
+  const openSignature = (u: User) => {
+    setSigUser(u);
   };
 
   const submit = async (v: z.infer<typeof schema>) => {
@@ -87,6 +95,39 @@ export function UsersPage() {
       toast.error('Não foi possível salvar', apiErrorMessage(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const saveSignature = async () => {
+    if (!sigUser) return;
+    const drawn = modalSigRef.current?.toDataURL();
+    if (!drawn) return;
+    setSigBusy(true);
+    try {
+      const updated = await usersApi.setSignature(sigUser.id, drawn);
+      setSigUser({ ...sigUser, signature: updated.signature ?? null });
+      modalSigRef.current?.clear();
+      toast.success('Assinatura salva');
+      refetch();
+    } catch (err) {
+      toast.error('Não foi possível salvar', apiErrorMessage(err));
+    } finally {
+      setSigBusy(false);
+    }
+  };
+
+  const removeSignature = async () => {
+    if (!sigUser?.signature) return;
+    setSigBusy(true);
+    try {
+      await usersApi.setSignature(sigUser.id, null);
+      setSigUser({ ...sigUser, signature: null });
+      toast.success('Assinatura removida');
+      refetch();
+    } catch (err) {
+      toast.error('Não foi possível remover', apiErrorMessage(err));
+    } finally {
+      setSigBusy(false);
     }
   };
 
@@ -174,6 +215,9 @@ export function UsersPage() {
                           <Button variant="secondary" size="sm" onClick={() => openEdit(u)}>
                             Editar
                           </Button>
+                          <Button variant="secondary" size="sm" title="Gerenciar assinatura digital" onClick={() => openSignature(u)}>
+                            <PenLine className="size-3.5" /> Assinatura
+                          </Button>
                           {u.id !== me?.id && (
                             <Button
                               variant={u.status === 'ACTIVE' ? 'ghost' : 'secondary'}
@@ -237,6 +281,41 @@ export function UsersPage() {
               <Button type="submit" loading={busy}>{editing ? 'Salvar' : 'Criar usuário'}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!sigUser} onOpenChange={(o) => !o && setSigUser(null)}>
+        <DialogContent>
+          <DialogHeader
+            title="Assinatura digital"
+            description={sigUser ? `${sigUser.name} · ${sigUser.email}` : undefined}
+          />
+          <DialogBody>
+            {sigUser?.signature ? (
+              <div className="mb-4">
+                <Label>Assinatura salva</Label>
+                <img src={sigUser.signature} alt="Assinatura salva" className="mt-1 h-16 w-full rounded-small border border-black/10 bg-white object-contain" />
+              </div>
+            ) : (
+              <p className="mb-4 rounded-card bg-surfaceBlue2 px-4 py-3 text-[12.5px] text-primary-dark">
+                Nenhuma assinatura salva. Desenhe abaixo para cadastrar.
+              </p>
+            )}
+            <SignaturePad ref={modalSigRef} label="Desenhar nova assinatura" hint="Substitui a salva ao clicar em Salvar." />
+          </DialogBody>
+          <DialogFooter>
+            {sigUser?.signature && (
+              <Button type="button" variant="ghost" loading={sigBusy} onClick={removeSignature}>
+                Remover salva
+              </Button>
+            )}
+            <div className="ml-auto flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => setSigUser(null)}>Fechar</Button>
+              <Button type="button" loading={sigBusy} onClick={saveSignature}>
+                <PenLine className="size-4" /> Salvar assinatura
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

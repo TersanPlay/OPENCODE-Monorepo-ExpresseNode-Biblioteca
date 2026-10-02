@@ -15,6 +15,7 @@ import { auditRouter } from './modules/audit/audit.routes';
 import { settingsRouter } from './modules/settings/settings.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { backupRouter } from './modules/backup/backup.routes';
+import { labelRouter } from './modules/label/label.routes';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 
 export const app = express();
@@ -44,6 +45,7 @@ app.use('/api/audit', auditRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/backups', backupRouter);
+app.use('/api/labels', labelRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

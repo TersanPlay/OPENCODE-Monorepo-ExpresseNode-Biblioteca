@@ -1,21 +1,28 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
-  Ban,
-  BarChart3,
-  BookMarked,
   BookOpen,
-  ClipboardList,
-  Database,
   DoorOpen,
-  FileText,
   LogOut,
   Menu,
-  Settings,
-  ShieldCheck,
-  Undo2,
-  Users,
   X,
 } from 'lucide-react';
+import {
+  FcBookmark,
+  FcBusinessman,
+  FcCancel,
+  FcComboChart,
+  FcConferenceCall,
+  FcDatabase,
+  FcInspection,
+  FcLibrary,
+  FcLineChart,
+  FcOpenedFolder,
+  FcPortraitMode,
+  FcPrint,
+  FcReading,
+  FcSettings,
+  FcUndo,
+} from 'react-icons/fc';
 import { useState } from 'react';
 import { useAuth } from '../../features/auth/auth-provider';
 import { cn } from '../../lib/utils';
@@ -37,30 +44,31 @@ const navSections: {
   {
     label: 'Operação',
     items: [
-      { to: '/admin', label: 'Dashboard', icon: BarChart3, adminOnly: false },
-      { to: '/admin/emprestimos', label: 'Empréstimos', icon: BookOpen, adminOnly: false },
-      { to: '/admin/devolucoes', label: 'Devoluções', icon: Undo2, adminOnly: false },
-      { to: '/admin/reservas', label: 'Reservas', icon: BookMarked, adminOnly: false },
+      { to: '/admin', label: 'Dashboard', icon: FcComboChart, adminOnly: false },
+      { to: '/admin/emprestimos', label: 'Empréstimos', icon: FcReading, adminOnly: false },
+      { to: '/admin/devolucoes', label: 'Devoluções', icon: FcUndo, adminOnly: false },
+      { to: '/admin/reservas', label: 'Reservas', icon: FcBookmark, adminOnly: false },
     ],
   },
   {
     label: 'Acervo',
     items: [
-      { to: '/admin/livros', label: 'Livros', icon: BookMarked, adminOnly: false },
-      { to: '/admin/autores', label: 'Autores', icon: Users, adminOnly: true },
-      { to: '/admin/categorias', label: 'Categorias', icon: ClipboardList, adminOnly: true },
+      { to: '/admin/livros', label: 'Livros', icon: FcLibrary, adminOnly: false },
+      { to: '/admin/etiquetas', label: 'Etiquetas', icon: FcPrint, adminOnly: false },
+      { to: '/admin/autores', label: 'Autores', icon: FcPortraitMode, adminOnly: true },
+      { to: '/admin/categorias', label: 'Categorias', icon: FcOpenedFolder, adminOnly: true },
     ],
   },
   {
     label: 'Comunidade',
     items: [
-      { to: '/admin/leitores', label: 'Leitores', icon: Users, adminOnly: false },
-      { to: '/admin/blocklist', label: 'BlockList', icon: Ban, adminOnly: false },
-      { to: '/admin/relatorios', label: 'Relatórios', icon: FileText, adminOnly: true },
-      { to: '/admin/usuarios', label: 'Usuários', icon: ShieldCheck, adminOnly: true },
-      { to: '/admin/auditoria', label: 'Auditoria', icon: FileText, adminOnly: true },
-      { to: '/admin/backup', label: 'Backup', icon: Database, adminOnly: true },
-      { to: '/admin/configuracoes', label: 'Configurações', icon: Settings, adminOnly: true },
+      { to: '/admin/leitores', label: 'Leitores', icon: FcConferenceCall, adminOnly: false },
+      { to: '/admin/blocklist', label: 'BlockList', icon: FcCancel, adminOnly: false },
+      { to: '/admin/relatorios', label: 'Relatórios', icon: FcLineChart, adminOnly: true },
+      { to: '/admin/usuarios', label: 'Usuários', icon: FcBusinessman, adminOnly: true },
+      { to: '/admin/auditoria', label: 'Auditoria', icon: FcInspection, adminOnly: true },
+      { to: '/admin/backup', label: 'Backup', icon: FcDatabase, adminOnly: true },
+      { to: '/admin/configuracoes', label: 'Configurações', icon: FcSettings, adminOnly: true },
     ],
   },
 ];

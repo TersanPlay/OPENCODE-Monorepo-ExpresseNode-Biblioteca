@@ -24,7 +24,7 @@
 
 ## Desvio do brief (importante)
 
-O arquivo `.superpowers/sdd/arch-task-1-brief.md` está **corrompido em encoding no disco** (UTF-8 duplamente codificado / mojibake — ex.: "VisÃ£o geral", "Ã§", "Â·", "â€"). Copiar byte a byte teria gravado texto ilegível na página. Solução: conteúdo estrutural e textual idêntico ao brief, com acentuação/português restaurado ("Visão geral", "Segurança", "Operação", "—", "·", "•"). Nenhuma mudança de estrutura, código ou ordem.
+O arquivo `.superpowers/sdd/arch-task-1-brief.md` está **corrompido em encoding no disco** (UTF-8 duplamente codificado / mojibake — ex.: "Visão geral", "ç", "Â·", "â€"). Copiar byte a byte teria gravado texto ilegível na página. Solução: conteúdo estrutural e textual idêntico ao brief, com acentuação/português restaurado ("Visão geral", "Segurança", "Operação", "—", "·", "•"). Nenhuma mudança de estrutura, código ou ordem.
 
 ## Arquivos alterados
 

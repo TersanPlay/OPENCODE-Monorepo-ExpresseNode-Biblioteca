@@ -1,15 +1,15 @@
 ﻿# Brief extraído do plano (Task 1)
 
-### Task 1: PÃ¡gina `/arquitetura` + rota
+### Task 1: Página `/arquitetura` + rota
 
 **Files:**
 - Create: `frontend/src/pages/public/architecture.tsx`
 - Modify: `frontend/src/app/router/routes.tsx`
 
 **Interfaces:**
-- Produces: `export function ArchitecturePage()` â€” rota pÃºblica `arquitetura` dentro do bloco `PublicLayout`
+- Produces: `export function ArchitecturePage()` — rota pública `arquitetura` dentro do bloco `PublicLayout`
 
-- [ ] **Step 1: Criar `frontend/src/pages/public/architecture.tsx` com o conteÃºdo completo**
+- [ ] **Step 1: Criar `frontend/src/pages/public/architecture.tsx` com o conteúdo completo**
 
 ```tsx
 import type { ReactNode } from 'react';
@@ -25,12 +25,12 @@ import { Badge } from '../../components/ui/badge';
 import { TD, TH, TBody, THead, TR, Table } from '../../components/ui/table';
 
 const SECTIONS = [
-  { id: 'visao-geral', label: 'VisÃ£o geral' },
+  { id: 'visao-geral', label: 'Visão geral' },
   { id: 'stack', label: 'Stack' },
   { id: 'estrutura', label: 'Estrutura' },
   { id: 'fluxo-de-dados', label: 'Fluxo de dados' },
-  { id: 'seguranca', label: 'SeguranÃ§a' },
-  { id: 'operacao', label: 'OperaÃ§Ã£o' },
+  { id: 'seguranca', label: 'Segurança' },
+  { id: 'operacao', label: 'Operação' },
 ];
 
 const BACKEND_STACK = [
@@ -38,17 +38,17 @@ const BACKEND_STACK = [
   ['HTTP', 'Express 4'],
   ['ORM', 'Prisma 5 (@prisma/client)'],
   ['Banco', 'SQLite (backend/prisma/dev.db)'],
-  ['ValidaÃ§Ã£o', 'Zod 3 (src/validation.ts)'],
-  ['AutenticaÃ§Ã£o', 'JWT (jsonwebtoken) + bcryptjs'],
+  ['Validação', 'Zod 3 (src/validation.ts)'],
+  ['Autenticação', 'JWT (jsonwebtoken) + bcryptjs'],
   ['Rate limit', 'express-rate-limit'],
-  ['Cron', 'node-cron (backups automÃ¡ticos)'],
+  ['Cron', 'node-cron (backups automáticos)'],
 ] as const;
 
 const FRONTEND_STACK = [
   ['Framework', 'React 18 + TypeScript'],
   ['Build', 'Vite 5'],
   ['Estilo', 'Tailwind CSS 3 + Radix UI + Lucide'],
-  ['FormulÃ¡rios', 'React Hook Form + Zod resolvers'],
+  ['Formulários', 'React Hook Form + Zod resolvers'],
   ['Rotas', 'React Router 6'],
   ['HTTP', 'Axios (interceptor JWT)'],
 ] as const;
@@ -56,12 +56,12 @@ const FRONTEND_STACK = [
 const FLOW_STEPS = [
   'A SPA chama os clientes de features/api.ts (ex.: loansApi.createBatch).',
   'O interceptor de services/axios.ts injeta Authorization: Bearer <token> salvo em localStorage.',
-  'O Express roteia para o mÃ³dulo correspondente (app.ts monta /api/<recurso>).',
-  'Corpo e query sÃ£o validados com Zod; falha responde 400 com { error }.',
-  'A regra de negÃ³cio roda via Prisma (SQLite), geralmente em $transaction.',
-  'Toda mutaÃ§Ã£o registra auditoria com writeAudit().',
+  'O Express roteia para o módulo correspondente (app.ts monta /api/<recurso>).',
+  'Corpo e query são validados com Zod; falha responde 400 com { error }.',
+  'A regra de negócio roda via Prisma (SQLite), geralmente em $transaction.',
+  'Toda mutação registra auditoria com writeAudit().',
   'Erros conhecidos viram HttpError; o errorHandler devolve { error } com o status correto.',
-  'Em 401 (fora do login), o interceptor limpa o token e encerra a sessÃ£o.',
+  'Em 401 (fora do login), o interceptor limpa o token e encerra a sessão.',
 ];
 
 const ENV_KEYS = [
@@ -158,19 +158,19 @@ export function ArchitecturePage() {
         <header className="reveal in max-w-3xl">
           <Badge variant="primary" className="mb-4">
             <Boxes className="size-3.5" />
-            DocumentaÃ§Ã£o tÃ©cnica
+            Documentação técnica
           </Badge>
           <h1 className="text-4xl font-extrabold leading-[1.08] tracking-tight text-ink">
             Arquitetura <span className="block text-primary">do projeto</span>
           </h1>
           <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed text-muted">
-            Como a biblioteca digital Ã© construÃ­da: camadas, tecnologias, fluxo de dados,
-            seguranÃ§a e operaÃ§Ã£o.
+            Como a biblioteca digital é construída: camadas, tecnologias, fluxo de dados,
+            segurança e operação.
           </p>
         </header>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[210px_minmax(0,1fr)]">
-          <nav aria-label="SeÃ§Ãµes" className="lg:sticky lg:top-24 lg:self-start">
+          <nav aria-label="Seções" className="lg:sticky lg:top-24 lg:self-start">
             <ul className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
               {SECTIONS.map((s) => (
                 <li key={s.id} className="shrink-0 lg:shrink">
@@ -186,7 +186,7 @@ export function ArchitecturePage() {
           </nav>
 
           <main className="space-y-12">
-            <Section id="visao-geral" icon={Layers} title="VisÃ£o geral">
+            <Section id="visao-geral" icon={Layers} title="Visão geral">
               <Card>
                 <div className="grid items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
                   <LayerBox title="Frontend" sub="React + Vite Â· porta 5173" />
@@ -198,7 +198,7 @@ export function ArchitecturePage() {
                 <p className="mt-4 text-[13px] leading-relaxed text-muted">
                   SPA autenticada por JWT stateless. Em desenvolvimento, o Vite faz proxy de
                   {' '}<code className="rounded bg-surfaceWarm px-1.5 py-0.5 font-mono text-[11.5px]">/api</code>{' '}
-                  para a porta 3333. O schema Prisma estÃ¡ preparado para migraÃ§Ã£o futura ao PostgreSQL.
+                  para a porta 3333. O schema Prisma está preparado para migração futura ao PostgreSQL.
                 </p>
               </Card>
             </Section>
@@ -239,20 +239,20 @@ export function ArchitecturePage() {
                 <pre className="overflow-x-auto rounded-control bg-surfaceWarm p-4 font-mono text-[12px] leading-relaxed text-ink">
 {`backend/
   prisma/schema.prisma      Modelos do banco
-  scripts/smoke.ts          SuÃ­te E2E via API
+  scripts/smoke.ts          Suíte E2E via API
   src/
     app.ts                  Routers, CORS, handlers de erro
     validation.ts           Schemas Zod + helpers
     lib/                    prisma, audit, overdue, cover...
     middleware/             auth, rate-limits, errors
-    modules/                Um router por domÃ­nio
+    modules/                Um router por domínio
 
 frontend/
   src/
     app/router/             Rotas e guardas
     components/             layout/ e ui/ (design system)
     features/api.ts         Clientes por entidade
-    pages/public|admin/     PÃ¡ginas
+    pages/public|admin/     Páginas
     services/axios.ts       Interceptor JWT + logout 401
     types/api.ts            Tipos das entidades`}
                 </pre>
@@ -274,13 +274,13 @@ frontend/
               </Card>
             </Section>
 
-            <Section id="seguranca" icon={ShieldCheck} title="SeguranÃ§a">
+            <Section id="seguranca" icon={ShieldCheck} title="Segurança">
               <div className="space-y-3">
                 <Card>
                   <ul className="space-y-2 text-[13.5px] leading-relaxed text-ink">
-                    <li>â€¢ Login valida credenciais com bcrypt e emite JWT assinado com expiraÃ§Ã£o padrÃ£o de 8 horas.</li>
-                    <li>â€¢ ComparaÃ§Ã£o contra hash dummy quando o usuÃ¡rio nÃ£o existe, evitando enumeraÃ§Ã£o de e-mails.</li>
-                    <li>â€¢ requireAuth consulta o banco a cada requisiÃ§Ã£o: usuÃ¡rio precisa existir e estar ACTIVE.</li>
+                    <li>â€¢ Login valida credenciais com bcrypt e emite JWT assinado com expiração padrão de 8 horas.</li>
+                    <li>â€¢ Comparação contra hash dummy quando o usuário não existe, evitando enumeração de e-mails.</li>
+                    <li>â€¢ requireAuth consulta o banco a cada requisição: usuário precisa existir e estar ACTIVE.</li>
                     <li>â€¢ Rate limits: login 10 tentativas / 15 min Â· consulta de capa 30 / 15 min.</li>
                   </ul>
                 </Card>
@@ -295,11 +295,11 @@ frontend/
                     <TBody>
                       <TR>
                         <TD className="font-extrabold">ADMIN</TD>
-                        <TD>Tudo: acervo, circulaÃ§Ã£o, relatÃ³rios, usuÃ¡rios, configuraÃ§Ãµes, auditoria e backup</TD>
+                        <TD>Tudo: acervo, circulação, relatórios, usuários, configurações, auditoria e backup</TD>
                       </TR>
                       <TR>
                         <TD className="font-extrabold">ATTENDANT</TD>
-                        <TD>OperaÃ§Ã£o do dia a dia: acervo, emprÃ©stimos, devoluÃ§Ãµes, reservas e leitores</TD>
+                        <TD>Operação do dia a dia: acervo, empréstimos, devoluções, reservas e leitores</TD>
                       </TR>
                     </TBody>
                   </Table>
@@ -307,16 +307,16 @@ frontend/
               </div>
             </Section>
 
-            <Section id="operacao" icon={Wrench} title="OperaÃ§Ã£o">
+            <Section id="operacao" icon={Wrench} title="Operação">
               <div className="space-y-3">
                 <Card>
                   <h3 className="mb-2 text-[13px] font-extrabold uppercase tracking-wide text-primary-dark">
                     Backups
                   </h3>
                   <p className="text-[13.5px] leading-relaxed text-ink">
-                    AutomÃ¡ticos Ã s 18:30 e 23:45 via node-cron usando{' '}
+                    Automáticos às 18:30 e 23:45 via node-cron usando{' '}
                     <code className="rounded bg-surfaceWarm px-1.5 py-0.5 font-mono text-[11.5px]">VACUUM INTO</code>,
-                    com rotaÃ§Ã£o dos 5 arquivos mais recentes e restauraÃ§Ã£o protegida por papel ADMIN.
+                    com rotação dos 5 arquivos mais recentes e restauração protegida por papel ADMIN.
                   </p>
                 </Card>
                 <Card>
@@ -324,9 +324,9 @@ frontend/
                     Erros
                   </h3>
                   <p className="mb-2 text-[13.5px] leading-relaxed text-ink">
-                    Formato Ãºnico{' '}
+                    Formato único{' '}
                     <code className="rounded bg-surfaceWarm px-1.5 py-0.5 font-mono text-[11.5px]">{`{ "error": "<mensagem>" }`}</code>.
-                    ValidaÃ§Ã£o 400 Â· negÃ³cio 400/401/403/404/409 Â· duplicado 409 Â· inexistente 404 Â· nÃ£o tratado 500.
+                    Validação 400 Â· negócio 400/401/403/404/409 Â· duplicado 409 Â· inexistente 404 Â· não tratado 500.
                   </p>
                 </Card>
                 <Card>
@@ -344,7 +344,7 @@ frontend/
                     ))}
                   </div>
                   <p className="mt-2 text-[12.5px] text-muted">
-                    Nomes das variÃ¡veis â€” valores definidos apenas no .env local, nunca versionados.
+                    Nomes das variáveis — valores definidos apenas no .env local, nunca versionados.
                   </p>
                 </Card>
               </div>
@@ -359,13 +359,13 @@ frontend/
 
 - [ ] **Step 2: Registrar a rota em `routes.tsx`**
 
-Adicionar ao bloco `<Route element={<PublicLayout />}>`, apÃ³s a rota `livros/:id`:
+Adicionar ao bloco `<Route element={<PublicLayout />}>`, após a rota `livros/:id`:
 
 ```tsx
 <Route path="arquitetura" element={<ArchitecturePage />} />
 ```
 
-E adicionar o import junto aos demais imports pÃºblicos:
+E adicionar o import junto aos demais imports públicos:
 
 ```tsx
 import { ArchitecturePage } from '../../pages/public/architecture';

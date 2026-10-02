@@ -1,24 +1,18 @@
-import { useSearchParams } from 'react-router-dom';
-import { Search, Undo2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowRight, Search } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card } from '../../../components/ui/card';
-import { ConfirmDialog } from '../../../components/ui/confirm-dialog';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { PageHeader } from '../../../components/ui/page-header';
 import { Pagination } from '../../../components/ui/pagination';
 import { Skeleton } from '../../../components/ui/skeleton';
-import { LoanStatusBadge } from '../../../components/ui/status-badge';
-import { Select } from '../../../components/ui/select';
+import { Badge } from '../../../components/ui/badge';
 import { TD, TH, TBody, THead, TR, Table } from '../../../components/ui/table';
 import { loansApi } from '../../api';
-import { SignatureField, type SignatureFieldHandle } from '../components/signature-field';
 import { useAsyncData } from '../../hooks/use-async-data';
 import { useDebounce } from '../../hooks/use-debounce';
-import { useApiToast } from '../../toast/toast-provider';
-import { apiErrorMessage } from '../../../lib/errors';
-import { formatDate } from '../../../lib/format';
-import type { Loan } from '../../../types/api';
+import { formatCPF } from '../../../lib/format';
 
 export function ReturnsPage() {
   const [params, setParams] = useSearchParams();
@@ -26,60 +20,16 @@ export function ReturnsPage() {
   const page = Number(params.get('page') ?? '1');
   const [input, setInput] = useState(q);
   const debounced = useDebounce(input, 350);
-  const [returning, setReturning] = useState<Loan | null>(null);
-  const [returnCondition, setReturnCondition] = useState<string>('');
-  const [returnObservations, setReturnObservations] = useState('');
-  const [busy, setBusy] = useState(false);
-  const returnSigFieldRef = useRef<SignatureFieldHandle>(null);
-  const [returnSigValid, setReturnSigValid] = useState(false);
-  const { toast } = useApiToast();
-
-  const resetReturnForm = () => {
-    setReturning(null);
-    setReturnCondition('');
-    setReturnObservations('');
-    returnSigFieldRef.current?.reset();
-    setReturnSigValid(false);
-  };
-
-  useEffect(() => {
-    if (returning) {
-      setReturnCondition('');
-      setReturnObservations('');
-      returnSigFieldRef.current?.reset();
-    }
-  }, [returning?.id]);
 
   const fetcher = () =>
-    loansApi.list({ search: debounced || undefined, status: 'active', page, pageSize: 12 });
-  const { data, error, loading, refetch } = useAsyncData(fetcher, [debounced, page]);
-
-  const confirmReturn = async () => {
-    if (!returning) return;
-    const sig = returnSigFieldRef.current?.resolve();
-    if (!sig) return;
-    setBusy(true);
-    try {
-      await loansApi.return(returning.id, {
-        condition: returnCondition || undefined,
-        observations: returnObservations || undefined,
-        ...sig,
-      });
-      toast.success('Devolução registrada', `${returning.book?.title} devolvido`);
-      resetReturnForm();
-      refetch();
-    } catch (err) {
-      toast.error('Não foi possível registrar', apiErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
+    loansApi.pendingReturns({ search: debounced || undefined, page, pageSize: 12 });
+  const { data, error, loading } = useAsyncData(fetcher, [debounced, page]);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Devoluções"
-        description={`${data?.total ?? 0} empréstimos abertos aguardando devolução`}
+        description={`${data?.total ?? 0} leitores com empréstimos abertos`}
       />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -88,7 +38,7 @@ export function ReturnsPage() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Buscar por leitor ou livro..."
+            placeholder="Buscar por leitor, CPF ou livro..."
             className="h-10 w-full rounded-control bg-surface pl-10 pr-3 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(23,26,26,.1)] focus:outline-none focus:shadow-[inset_0_0_0_2px_#087F8C]"
           />
         </div>
@@ -108,7 +58,7 @@ export function ReturnsPage() {
         <Card variant="soft">
           <EmptyState
             title="Nenhuma devolução pendente"
-            description="Todos os livros emprestados estão em dia."
+            description="Nenhum leitor com empréstimos abertos."
           />
         </Card>
       ) : (
@@ -118,51 +68,39 @@ export function ReturnsPage() {
               <Table>
                 <THead>
                   <TR>
-                    <TH>#</TH>
                     <TH>Leitor</TH>
-                    <TH>Livro</TH>
-                    <TH>Saída</TH>
-                    <TH>Vencimento</TH>
-                    <TH>Dias de atraso</TH>
-                    <TH>Status</TH>
+                    <TH>Livros em aberto</TH>
+                    <TH>Atrasados</TH>
                     <TH className="text-right">Ações</TH>
                   </TR>
                 </THead>
                 <TBody>
-                  {data.items.map((l) => {
-                    const overdue = l.status === 'OVERDUE';
-                    const lateDays = overdue
-                      ? Math.max(0, Math.floor((new Date().getTime() - new Date(l.dueDate).getTime()) / 86400000))
-                      : 0;
-                    return (
-                      <TR key={l.id} className={overdue ? 'bg-destructive-soft/30' : undefined}>
-                        <TD className="font-mono text-[12px] text-muted">
-                          {l.number ?? `#${l.id}`}
-                        </TD>
-                        <TD className="max-w-44 truncate font-semibold text-ink">{l.reader?.name}</TD>
-                        <TD className="max-w-60">
-                          <span className="block line-clamp-1 font-medium text-ink/85">{l.book?.title}</span>
-                        </TD>
-                        <TD className="text-muted">{formatDate(l.loanDate)}</TD>
-                        <TD className="text-muted">{formatDate(l.dueDate)}</TD>
-                        <TD>
-                          {overdue ? (
-                            <span className="font-bold text-destructive">{lateDays}d</span>
-                          ) : (
-                            <span className="text-muted">—</span>
-                          )}
-                        </TD>
-                        <TD><LoanStatusBadge status={l.status} /></TD>
-                        <TD className="text-right">
-                          <Button size="sm" onClick={() => {
-                            setReturning(l);
-                          }}>
-                            <Undo2 className="size-3.5" /> Receber devolução
+                  {data.items.map((g) => (
+                    <TR key={g.reader.id} className={g.overdueCount > 0 ? 'bg-destructive-soft/30' : undefined}>
+                      <TD>
+                        <p className="font-semibold text-ink">{g.reader.name}</p>
+                        <p className="font-mono text-[12px] text-muted">{formatCPF(g.reader.cpf)}</p>
+                      </TD>
+                      <TD>
+                        <span className="font-bold text-ink">{g.activeCount}</span>
+                        <span className="text-muted"> {g.activeCount === 1 ? 'livro' : 'livros'}</span>
+                      </TD>
+                      <TD>
+                        {g.overdueCount > 0 ? (
+                          <Badge variant="destructive">{g.overdueCount} atrasado{g.overdueCount === 1 ? '' : 's'}</Badge>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </TD>
+                      <TD className="text-right">
+                        <Link to={`/admin/devolucoes/${g.reader.id}`}>
+                          <Button size="sm">
+                            Receber <ArrowRight className="size-3.5" />
                           </Button>
-                        </TD>
-                      </TR>
-                    );
-                  })}
+                        </Link>
+                      </TD>
+                    </TR>
+                  ))}
                 </TBody>
               </Table>
             </Card>
@@ -179,69 +117,6 @@ export function ReturnsPage() {
           </>
         )
       )}
-
-      <ConfirmDialog
-        open={!!returning}
-        onOpenChange={(o) => {
-          if (!o) resetReturnForm();
-        }}
-        title="Registrar devolução"
-        description={
-          returning
-            ? `${returning.book?.title} — leitor ${returning.reader?.name}.`
-            : undefined
-        }
-        confirmLabel="Receber devolução"
-        loading={busy}
-        confirmDisabled={!returnSigValid}
-        onConfirm={confirmReturn}
-      >
-        <div className="space-y-3">
-          {returning && (
-            <div className="rounded-card bg-surfaceBlue2 p-3">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
-                Pré-visualização do Termo de Devolução
-              </p>
-              <div className="mt-2 grid gap-2 text-[13px] text-ink sm:grid-cols-2">
-                <p><span className="text-muted">Empréstimo: </span><span className="font-mono">{returning.number ?? `#${returning.id}`}</span></p>
-                <p><span className="text-muted">Situação: </span><span className="font-semibold">{returning.status === 'OVERDUE' ? 'Devolvido com atraso' : 'Devolvido no prazo'}</span></p>
-                <p><span className="text-muted">Saída: </span>{formatDate(returning.loanDate)}</p>
-                <p><span className="text-muted">Vencimento: </span>{formatDate(returning.dueDate)}</p>
-                <p><span className="text-muted">Devolução: </span>{new Date().toLocaleDateString('pt-BR')}</p>
-              </div>
-            </div>
-          )}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-ink/70">Condição do livro</label>
-            <Select
-              value={returnCondition || 'NONE'}
-              onValueChange={(v) => setReturnCondition(v === 'NONE' ? '' : v)}
-              options={[
-                { value: 'NONE', label: 'Não informado' },
-                { value: 'BOM', label: 'Bom estado' },
-                { value: 'REGULAR', label: 'Regular' },
-                { value: 'DANIFICADO', label: 'Danificado' },
-              ]}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-ink/70">Observações</label>
-            <textarea
-              value={returnObservations}
-              onChange={(e) => setReturnObservations(e.target.value)}
-              placeholder="Ex.: capa com amassado, páginas marcadas..."
-              rows={2}
-              maxLength={500}
-              className="w-full rounded-control bg-surface px-2 py-1.5 text-sm text-ink shadow-[inset_0_0_0_1px_rgba(23,26,26,.1)] focus:outline-none focus:shadow-[inset_0_0_0_2px_#087F8C]"
-            />
-          </div>
-          <SignatureField
-            ref={returnSigFieldRef}
-            savedSignature={returning?.reader?.signature}
-            onValidityChange={setReturnSigValid}
-          />
-        </div>
-      </ConfirmDialog>
     </div>
   );
 }

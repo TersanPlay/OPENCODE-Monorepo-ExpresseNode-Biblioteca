@@ -17,17 +17,20 @@ pnpm --filter @library/api smoke
 
 Cobre **62 casos**, incluindo:
 
-- Login (válido/inválido), RBAC (ADMIN × ATTENDANT), credenciais inválidas → 401
+- Login, RBAC (ADMIN × ATTENDANT), token inválido/expirado, rate limit
 - CRUD de livros, autores, categorias, leitores, usuários
-- ISBN (validação, duplicado → 409, normalize)
+- ISBN (validação, duplicado → 409, normalize) e `GET /books/exists`
+- Badge `hasActiveLoan`, catálogo público e filtro de disponibilidade
 - Campos expandidos do livro (volume, cdd, cutter, physicalLocation, availableCopies, acquisitionType)
-- Empréstimo individual e em lote (limites, livro emprestado/reservado/arquivado, duplicados, prazo futuro, leitor bloqueado/atrasado)
+- Autores e categorias com cadastro automático (criação e reuso case-insensitive)
+- Empréstimo individual e em lote (limites, livro emprestado/reservado/arquivado, duplicados, prazo futuro, leitor bloqueado/atrasado, aborto atômico)
 - Renovação (limite, atrasado, bloqueado, reserva pendente)
 - Devolução com condição/observações e ativação de reserva (`AVAILABLE`)
 - Reservas (criação, cancelamento, atendimento, expiração)
-- Relatórios (tipos) e auditoria
-- Configurações
-- Exclusão de leitor com anonimização LGPD
+- Relatórios (todos os tipos) e exportação CSV
+- Configurações e auditoria
+
+Limpeza via `deleteMany` direto no `finally` (não exercita o `DELETE /readers/:id` LGPD — ver abaixo). Não cobre: expiração real de token, upload de backup, PDFs e `429` além do login.
 
 > Não cobertos pelo smoke (validar manualmente quando mexer nessas áreas):
 > rate limit de login (429), token expirado, exportação CSV (`GET /reports/export`),
@@ -38,7 +41,12 @@ As fixtures são criadas com nomes/emails marcados como `TEST` e removidas no `f
 
 ## Testes específicos de funcionalidade
 
-- `apps/api/scripts/delete-reader-e2e.ts` — 15 casos de exclusão de leitor (anonimização, bloqueio com empréstimos ativos, cancelamento de reservas, auditoria).
+- `apps/api/scripts/delete-reader-e2e.ts` — 15 casos de exclusão de leitor (anonimização, bloqueio com empréstimos ativos, cancelamento de reservas, auditoria). Sem script npm; rodar com `pnpm --filter @library/api exec tsx scripts/delete-reader-e2e.ts` (backend rodando).
+
+## Banco e scripts utilitários
+
+- `pnpm --filter @library/api db:setup` (push + seed), `db:push`, `db:seed`, `db:dedupe` (`dedupe-books.ts`), `scripts/import-books.ts` (planilha), `scripts/check-users.ts` e `check-snapshots.ts` (diagnóstico).
+- `scripts/review-categories/` — automação de categorias fora do smoke: `classify.py` (análise), `import.py` (importa aprovadas), `cleanup-legacy.py`. Ver `scripts/review-categories/README.md`.
 
 ## Typecheck, lint e build
 
@@ -55,7 +63,7 @@ Fluxos de interface são validados com scripts temporários usando Edge headless
 
 - Técnica: setar inputs via native setter + disparar `input`; cliques em elementos com handlers `onMouseDown` (ex.: sugestões de autor) exigem `dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`.
 - Scripts e perfis ficam em diretório temporário (ex.: `%TEMP%\opencode`) e são **removidos ao final**.
-- Exemplos de fluxos já validados: empréstimo multi-livro (9 etapas), campo de autores com vírgula e autocomplete, login e navegação.
+- Exemplos de fluxos já validados: empréstimo multi-livro (9 etapas), campo de autores com vírgula e autocomplete, login e navegação, cadastro público de leitor, catálogo e página de arquitetura (screenshots headless).
 
 ## Checklist de conclusão de tarefa (AGENTS.md)
 

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { BookOpen, CalendarClock, FileText, KeyRound, UserRound } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { BookOpen, CalendarClock, FileText, KeyRound, PenLine, UserRound } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { EmptyState } from '../../components/ui/empty-state';
 import { Label } from '../../components/ui/form-field';
 import { Input } from '../../components/ui/input';
@@ -9,6 +10,7 @@ import { Skeleton } from '../../components/ui/skeleton';
 import { LoanStatusBadge, ReservationStatusBadge } from '../../components/ui/status-badge';
 import { TD, TH, TBody, THead, TR, Table } from '../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { SignaturePad, type SignaturePadHandle } from '../../features/loans/components/signature-pad';
 import { readerPortalApi } from '../../features/readers/portal-api';
 import { useReaderSession } from '../../features/readers/reader-session';
 import { useAsyncData } from '../../features/hooks/use-async-data';
@@ -26,6 +28,9 @@ export function ReaderAccountPage() {
 
   const [form, setForm] = useState({ name: '', phone: '', email: '' });
   const [pwd, setPwd] = useState({ currentPassword: '', password: '', confirm: '' });
+  const [sigBusy, setSigBusy] = useState(false);
+  const [confirmingSigDelete, setConfirmingSigDelete] = useState(false);
+  const sigPadRef = useRef<SignaturePadHandle>(null);
 
   useEffect(() => {
     if (reader) setForm({ name: reader.name, phone: reader.phone ?? '', email: reader.email ?? '' });
@@ -80,6 +85,39 @@ export function ReaderAccountPage() {
     }
   };
 
+  const saveSignature = async () => {
+    const drawn = sigPadRef.current?.toDataURL();
+    if (!drawn) {
+      toast('error', 'Desenhe a assinatura antes de salvar');
+      return;
+    }
+    setSigBusy(true);
+    try {
+      await readerPortalApi.setMySignature(drawn);
+      sigPadRef.current?.clear();
+      await refresh();
+      toast('success', 'Assinatura salva');
+    } catch (err) {
+      toast('error', 'Não foi possível salvar', apiErrorMessage(err));
+    } finally {
+      setSigBusy(false);
+    }
+  };
+
+  const deleteSignature = async () => {
+    setSigBusy(true);
+    try {
+      await readerPortalApi.deleteMySignature();
+      setConfirmingSigDelete(false);
+      await refresh();
+      toast('success', 'Assinatura excluída');
+    } catch (err) {
+      toast('error', 'Não foi possível excluir', apiErrorMessage(err));
+    } finally {
+      setSigBusy(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <div>
@@ -111,15 +149,20 @@ export function ReaderAccountPage() {
       <Card>
         <CardContent className="p-5">
           <Tabs defaultValue="loans">
-            <TabsList>
-              <TabsTrigger value="loans">
-                <BookOpen className="size-3.5" /> Meus empréstimos
-              </TabsTrigger>
-              <TabsTrigger value="reservations">
-                <CalendarClock className="size-3.5" /> Minhas reservas
-              </TabsTrigger>
-              <TabsTrigger value="profile">Meus dados</TabsTrigger>
-            </TabsList>
+            <div className="flex justify-center">
+              <TabsList>
+                <TabsTrigger value="loans" className="inline-flex items-center gap-1.5">
+                  <BookOpen className="size-3.5" /> Meus empréstimos
+                </TabsTrigger>
+                <TabsTrigger value="reservations" className="inline-flex items-center gap-1.5">
+                  <CalendarClock className="size-3.5" /> Minhas reservas
+                </TabsTrigger>
+                <TabsTrigger value="profile">Meus dados</TabsTrigger>
+                <TabsTrigger value="signature" className="inline-flex items-center gap-1.5">
+                  <PenLine className="size-3.5" /> Assinatura
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="loans">
               {loans.loading ? (
@@ -238,9 +281,55 @@ export function ReaderAccountPage() {
                 </form>
               </div>
             </TabsContent>
+
+            <TabsContent value="signature" className="space-y-4">
+              {reader?.signature ? (
+                <div>
+                  <Label>Assinatura atual</Label>
+                  <img
+                    src={reader.signature}
+                    alt="Assinatura atual"
+                    className="mt-1 h-24 w-full rounded-small border border-black/10 bg-white object-contain"
+                  />
+                </div>
+              ) : (
+                <p className="rounded-card bg-surfaceBlue2 px-4 py-3 text-[12.5px] text-primary-dark">
+                  Nenhuma assinatura registrada. Desenhe abaixo para cadastrar.
+                </p>
+              )}
+              <SignaturePad
+                ref={sigPadRef}
+                label="Editar assinatura"
+                hint="Assine e clique em Salvar para substituir a atual."
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={saveSignature} loading={sigBusy}>
+                  <PenLine className="size-4" /> Salvar assinatura
+                </Button>
+                {reader?.signature && (
+                  <Button variant="ghost" loading={sigBusy} onClick={() => setConfirmingSigDelete(true)}>
+                    Excluir assinatura
+                  </Button>
+                )}
+              </div>
+              <p className="text-[12px] text-muted">
+                A alteração atinge apenas a assinatura do seu perfil. Termos de empréstimos e
+                devoluções já assinados permanecem inalterados.
+              </p>
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmingSigDelete}
+        onOpenChange={setConfirmingSigDelete}
+        title="Excluir assinatura"
+        description="Sua assinatura atual será removida do perfil. Você poderá desenhar uma nova depois. Termos já assinados não são afetados."
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={deleteSignature}
+      />
     </div>
   );
 }

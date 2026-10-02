@@ -6,10 +6,14 @@
 |---|---|---|---|
 | `loanLimit` | 4 | 1–20 | Máximo de empréstimos ativos (ACTIVE + OVERDUE) por leitor |
 | `defaultLoanDays` | 15 | 1–90 | Prazo de devolução aplicado quando não informado |
-| `maxRenewals` | 1 | 0–5 | Máximo de renovações por empréstimo |
+| `maxRenewals` | 1 | 0–5 (backend; tela aceita 0–10 e o backend barra acima de 5 com `400`) | Máximo de renovações por empréstimo |
 | Instituição | vazio | — | Nome, endereço, telefone, e-mail, horário — preenchidos pelo usuário |
 
-> Campos institucionais começam vazios e só aparecem na interface quando preenchidos (não há valores de demonstração).
+> Campos institucionais começam vazios e só aparecem na interface quando preenchidos (não há valores de demonstração). Exceções pontuais: cabeçalho do PDF e logo usam `"Biblioteca Pública"` quando o nome não foi configurado.
+
+## Configurações — acesso
+
+`GET /settings` é público; `PUT /settings` exige `ADMIN`.
 
 ## Status
 
@@ -18,11 +22,11 @@
 
 ### Empréstimo
 - `ACTIVE` — em aberto, dentro do prazo.
-- `OVERDUE` — `ACTIVE` cuja `dueDate` passou sem devolução (marcado por `refreshOverdue`, disparado automaticamente nas consultas de empréstimos, dashboard, relatórios e detalhe do leitor).
+- `OVERDUE` — `ACTIVE` cuja `dueDate` passou sem devolução (marcado por `refreshOverdue`, disparado em `GET/POST /loans`, `GET /loans/search`, `GET /readers/:id`, dashboard, relatórios e portal `GET /readers/me/loans`).
 - `RETURNED` — devolvido.
 
 ### Reserva
-`PENDING` (aguardando) → `AVAILABLE` (livro devolvido, aguardando retirada) → `FULFILLED` (empréstimo criado) | `CANCELLED` | `EXPIRED` (3 dias após criação).
+`PENDING` (aguardando) → `AVAILABLE` (livro devolvido, aguardando retirada) → `FULFILLED` (empréstimo criado) | `CANCELLED` | `EXPIRED` (só `PENDING` expira, 3 dias após criação; `AVAILABLE` nunca expira sozinho).
 
 ### Livro
 `isArchived` — arquivamento é **soft delete**: o livro some das listagens mas permanece no banco; não pode ser emprestado enquanto arquivado.
@@ -39,11 +43,11 @@
 
 ### Snapshots de dados
 
-No momento da criação do empréstimo, são salvos os dados do leitor, livro e usuário responsáveis como snapshots. Campos: `readerNameSnapshot`, `bookTitleSnapshot`, `bookAuthorSnapshot`, `bookIsbnSnapshot`, `bookNumberSnapshot`, `createdByNameSnapshot`. Esses snapshots são usados nos Termos PDF (documentos de empréstimo/devolução) para preservar o estado dos dados no momento do registro, mesmo que o leitor/livro sejam alterados depois.
+No momento da criação do empréstimo, são salvos os dados do leitor, livro e usuário responsáveis como snapshots. Campos: `readerNameSnapshot`, `bookTitleSnapshot`, `bookAuthorSnapshot`, `bookIsbnSnapshot`, `bookNumberSnapshot`, `createdByNameSnapshot`, `createdBySignatureSnapshot` (assinatura salva do operador, se houver). Na devolução: `receivedByNameSnapshot` + `receivedBySignatureSnapshot`. Esses snapshots são usados nos Termos PDF (documentos de empréstimo/devolução) para preservar o estado dos dados no momento do registro, mesmo que o leitor/livro sejam alterados depois.
 
-Para empréstimos criados antes da implementação dos snapshots, os termos PDF fazem fallback para os dados das relações atuais (reader, book, user).
+Para empréstimos criados antes da implementação dos snapshots, os termos PDF fazem fallback para os dados das relações atuais (reader, book, user). Empréstimos criados via atendimento de reserva (`fulfill`) não gravam snapshots nem assinatura.
 
-### Assinatura do leitor
+### Assinatura do leitor (obrigatória só na UI; opcional no backend)
 
 - No Step 3 do novo empréstimo, a UI exibe a pré-visualização do Termo e exige a assinatura do leitor no pad (mouse, touch ou caneta; limpar/refazer liberado). Sem assinatura, a confirmação fica bloqueada.
 - A mesma assinatura vale para todos os livros do lote; é salva em `loanSignature`/`loanSignedAt` de cada empréstimo e incorporada ao Termo de Empréstimo (PDF).
@@ -68,12 +72,19 @@ Para empréstimos criados antes da implementação dos snapshots, os termos PDF 
 
 Bloqueada quando (mensagem específica em cada caso):
 - Empréstimo já devolvido (`RETURNED`/`returnedAt`).
-- Empréstimo `OVERDUE` — atrasado não renova.
-- Leitor bloqueado ou inativo.
+- Empréstimo `OVERDUE` — atrasado não renova (o bloqueio por atraso roda antes do cálculo, e `renew` não dispara `refreshOverdue`, então o ramo "vencida" só vale se a marcação ainda não rodou).
+- Leitor excluído, bloqueado ou inativo.
 - `renewals ≥ maxRenewals`.
 - Existe reserva ativa (PENDING/AVAILABLE) para o livro.
 
 Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda futura) ou hoje (se vencida). `renewals` incrementa e a auditoria `LOAN_RENEWED` registra número e novo prazo.
+
+## Devolução em lote (página `/admin/devolucoes`)
+
+- Listagem agrupada por leitor (`GET /loans/returns/pending`, paginado por leitor); detalhe por leitor (`/admin/devolucoes/:readerId`) com todos os abertos.
+- Seleção individual + Selecionar todos; 1 livro usa a rota unitária (termo individual); ≥2 usam `POST /loans/returns/batch` (1–20 ids, mesmo leitor, transação única, mesma condição/observações/assinatura p/ todos).
+- Lote gera `returnGroup` (`DEV-` + menor id) em cada empréstimo e **um único Termo** listando todos os materiais; histórico/auditoria continuam por empréstimo (`LOAN_RETURNED` cada).
+- Unitária e lote compartilham o mesmo núcleo (`performReturn`): guards, assinatura, snapshots, ativação de reserva; auto-block roda 1× por operação.
 
 ## Devolução
 
@@ -81,15 +92,17 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 - Marca `RETURNED` e `returnedAt`.
 - Opcionalmente registra `returnCondition` (BOM/REGULAR/DANIFICADO) e `returnObservations` (até 500 caracteres).
 - Snapshot do responsável pela devolução: `receivedByNameSnapshot`.
-- Se houver reserva `PENDING` para o livro (mais antiga), ela vira `AVAILABLE` (aguardando retirada) — ou `EXPIRED` se `expiresAt` já passou.
-- **Bloqueio automático por atrasos repetidos**: após a devolução, se o leitor acumular 2 ou mais empréstimos `OVERDUE`, o status vira `BLOCKED` com categoria `ATRASO_REPETIDO` (responsável `null`, auditoria `READER_STATUS_CHANGED` com `auto: true`) e suas reservas `PENDING` são canceladas.
+- Se houver reserva `PENDING` para o livro (só a mais antiga), ela vira `AVAILABLE` (aguardando retirada) — ou `EXPIRED` se `expiresAt` já passou.
+- **Bloqueio automático por atrasos repetidos**: após a devolução, conta-se os `OVERDUE` restantes (**excluindo** o recém-devolvido); se ≥2 e o leitor ainda estiver `ACTIVE`, vira `BLOCKED` (`ATRASO_REPETIDO`, `blockedBy` nulo, auditoria `READER_STATUS_CHANGED` com `auto: true`) e suas reservas `PENDING` são canceladas (`AVAILABLE` ficam).
 
 ## Reserva
 
 - Leitor deve estar `ACTIVE`; bloqueado/inativo não reserva.
 - Não pode haver reserva ativa (PENDING/AVAILABLE) do mesmo leitor para o mesmo livro.
-- `expiresAt` = criação + 3 dias; `PENDING` vencida → `EXPIRED` automaticamente (`expireReservations`).
-- Atendimento (`fulfill`): cria o empréstimo em transação, validando de novo leitor ativo, livro livre e limite; reserva vira `FULFILLED`. Reserva cancelada/expirada não pode ser atendida.
+- `expiresAt` = criação + 3 dias; só `PENDING` vencida → `EXPIRED` automaticamente (`expireReservations`, rodando em `GET /loans`, `GET /reservations` e portal).
+- Atendimento (`fulfill`): cria o empréstimo em transação, validando de novo leitor ativo, livro livre e limite; reserva vira `FULFILLED`. Reserva cancelada/expirada não pode ser atendida. O empréstimo do `fulfill` **não** grava snapshots/assinatura e não checa `OVERDUE` do leitor.
+- Reserva do **balcão** não verifica livro arquivado; reserva do **portal** barra arquivado (`400`).
+- Cancelamento: portal só `PENDING`/`AVAILABLE` próprias; balcão só barra `FULFILLED` (recancelar é idempotente).
 - Devolução de livro com reserva PENDING a ativa como `AVAILABLE`.
 
 ## Autores com cadastro automático
@@ -101,6 +114,12 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 - Nome de autor: 2–120 caracteres.
 - No update do livro, a relação de autores é **reatribuída** (remove e recria), então o formulário deve enviar a lista completa.
 - Frontend: nomes digitados viram "chips"; chips de autores que serão criados aparecem destacados ("novo").
+
+## Categorias com cadastro automático + taxonomia canônica
+
+- O formulário de livro aceita nomes separados por **vírgulas**; nomes inexistentes são criados (find-or-create case-insensitive) com auditoria `CATEGORY_CREATED` — mesmo padrão dos autores.
+- A base usa a **taxonomia canônica de 39 categorias** (`scripts/review-categories/taxonomy.json`); `/admin/categorias` lista só canônicas após o cleanup.
+- Automação `scripts/review-categories/`: `classify.py` analisa (CDD, keywords, autores, Open Library) e gera `revisao-categorias.json` (`AUTO`/`REVIEW`/`INSUFFICIENT`) sem tocar o banco; `import.py --apply` importa aprovadas (backup prévio, idempotente); `cleanup-legacy.py --apply` remove categorias fora da taxonomia.
 
 ## Livros
 
@@ -114,15 +133,15 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 
 - CPF validado com dígitos verificadores (11 dígitos, sem sequências repetidas).
 - CPF único; e-mail único quando informado.
-- Bloqueio manual pela tela de leitores; bloqueado não empresta, não renova, não reserva nem retira reserva.
-- Bloqueio automático: 2+ empréstimos `OVERDUE` após uma devolução bloqueiam o leitor (`ATRASO_REPETIDO`) e cancelam suas reservas pendentes (ver Devolução).
+- Bloqueio manual pela tela de leitores; bloqueado não empresta, não renova, não reserva nem retira reserva. Categoria do bloqueio: `ATRASO_REPETIDO` | `COMPORTAMENTO` | `SOLICITACAO` | `OUTRO`.
+- Bloqueio automático: 2+ empréstimos `OVERDUE` restantes após uma devolução bloqueiam o leitor (`ATRASO_REPETIDO`) e cancelam suas reservas `PENDING` (ver Devolução).
 - Motivo e categoria de bloqueio registrados (`blockReason`, `blockCategory`, `blockedAt`, `blockedBy`).
 - **Exclusão com anonimização LGPD** (`DELETE /readers/:id`, ADMIN apenas):
-  - Bloqueia se houver empréstimos ativos ou em atraso.
-  - Cancela reservas pendentes/disponíveis do leitor.
-  - Substitui dados pessoais: nome → "Leitor excluído", CPF → "EXCLUIDO-{id}", demais campos → `null`.
+  - **Recusa** com `409` se houver empréstimos ativos ou em atraso (não bloqueia, barra a operação); `409` se já excluído.
+  - Cancela reservas `PENDING`/`AVAILABLE` do leitor.
+  - Substitui dados pessoais: nome → "Leitor excluído", CPF → "EXCLUIDO-000123" (6 dígitos), demais campos (incl. senha e assinatura) → `null`.
   - Status → `INACTIVE`, registra `deletedAt` e `anonymizedAt`.
-  - Registra auditoria `READER_DELETED` com referência ao ID original.
+  - Registra auditoria `READER_DELETED` com `reference: LTR-000123` e motivo opcional.
 
 ## Usuários do sistema
 
@@ -130,19 +149,20 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 - Senha mínima de 6 caracteres; hash bcrypt (10 rounds).
 - Usuário inativo não autentica (o `requireAuth` rejeita status ≠ `ACTIVE`).
 - Primeiro acesso: criado no seed a partir de `ADMIN_EMAIL`/`ADMIN_PASSWORD` (não há credenciais padrão). Perfis adicionais são criados pela tela Usuários.
+- Assinatura da equipe (`/admin/usuarios`, ADMIN): modal exclusivo via botão **Assinatura** na tabela (separado do cadastro/edição) — mostra a salva, desenhar substitui, botão remove. Salva em `signature`/`signatureUpdatedAt` (`PATCH /users/:id/signature`). A salva do operador da operação é congelada no empréstimo/devolução (`createdBySignatureSnapshot`/`receivedBySignatureSnapshot`) e incorporada na coluna do responsável nos Termos (fallback p/ linhas manuais).
 
 ## Portal do leitor (autocadastro)
 
 - Página pública `/cadastro`: nome, CPF (validado), e-mail (único, obrigatório — é o login), senha (mín. 6), telefone e nascimento opcionais. Conta nasce `ACTIVE`, sem admin.
 - Login em `/login` (aba Leitor) com e-mail + senha; sessão e token separados da equipe (`livraria_reader_token`).
 - Leitor vê e altera só o próprio cadastro (sem CPF/status), troca a própria senha, consulta empréstimos e termos próprios, cria/cancela as próprias reservas. Empréstimo, devolução, renovação e gestão seguem exclusivos do balcão.
-- Reserva pelo portal segue as mesmas regras do balcão (livro existente, não arquivado, sem duplicada ativa).
-- Leitores antigos (cadastrados no balcão, sem senha): o balcão define a senha em Detalhe do leitor → Senha de acesso, ou o próprio leitor ativa em `/login` → Primeiro acesso (confere CPF + e-mail do cadastro; só vale para conta ainda sem senha).
+- Reserva pelo portal barra livro arquivado; balcão não checa (assimetria conhecida).
+- Leitores antigos (cadastrados no balcão, sem senha): o balcão define a senha em Detalhe do leitor → Senha de acesso, ou o próprio leitor ativa em `/login` → Primeiro acesso (confere CPF com/sem máscara + e-mail sem caixa; exige `ACTIVE`, não excluído e conta ainda sem senha; `401` genérico; rate-limit).
 - Exclusão LGPD também apaga `passwordHash` e assinatura do leitor.
 
 ## Auditoria
 
-Toda operação de escrita registra quem (usuário autenticado), o quê (ação), sobre qual entidade, com metadados e IP. Falhas de login também são registradas (sem usuário).
+Toda operação de escrita registra quem (usuário autenticado; `null` em fluxos self/automáticos), o quê (ação), sobre qual entidade, com metadados e IP. Falhas de login também são registradas (sem usuário). Rotas de backup (`GET/POST/DELETE /backups`) não geram auditoria.
 
 Ações registradas: `LOGIN`, `LOGOUT`, `LOGIN_FAILED`, `USER_CREATED`, `USER_UPDATED`, `USER_PASSWORD_RESET`, `BOOK_CREATED`, `BOOK_UPDATED`, `BOOK_ARCHIVED`, `BOOK_RESTORED`, `AUTHOR_CREATED`, `AUTHOR_UPDATED`, `AUTHOR_ACTIVATED`, `AUTHOR_INACTIVATED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_STATUS_CHANGED`, `READER_CREATED`, `READER_UPDATED`, `READER_STATUS_CHANGED`, `READER_DELETED`, `LOAN_CREATED`, `LOAN_RETURNED`, `LOAN_RENEWED`, `RESERVATION_CREATED`, `RESERVATION_CANCELLED`, `RESERVATION_FULFILLED`, `SETTINGS_UPDATED`.
 
@@ -156,6 +176,7 @@ Ações registradas: `LOGIN`, `LOGOUT`, `LOGIN_FAILED`, `USER_CREATED`, `USER_UP
 - **Upload/Restauração local**: `POST /api/backups/restore-upload` — recebe arquivo via multipart (campo `file`, formatos `.sqlite`/`.db`, máx. 100 MB), copia sobre `dev.db`.
 - **Restauração do servidor**: `POST /api/backups/:filename/restore` — copia o backup do servidor sobre `dev.db`.
 - Extensão validada no backend (regex no filename, multer fileFilter no upload).
+- **Listar/criar/remover**: `GET /api/backups`, `POST /api/backups` (`201 { filename, size }`), `DELETE /api/backups/:filename`.
 - Restauração requer confirmação explícita no frontend (modal, não `window.confirm`).
 - Todas as rotas protegidas: `requireAuth` + `requireRoles('ADMIN')`.
 
@@ -182,11 +203,10 @@ O sistema não exibe nem cria dados fictícios em produção: estados vazios rea
 
 ### Segurança
 
-- Rotas de PDF exigem autenticação (`requireAuth` por rota).
-- Frontend busca o PDF como blob via axios (com token JWT), cria blob URL e abre com `window.open`.
-- Não existem rotas públicas de PDF.
+- Termos: `requireStaffOrLoanOwner` — qualquer staff **ou** o leitor dono (token do portal); terceiros recebem `403`; sem token, `401`. Não existem rotas públicas de PDF.
+- Frontend staff busca o PDF como blob via axios (com token JWT), cria blob URL e abre com `window.open`; portal usa o próprio token.
 
 ### Disponibilidade
 
-- Botões de documentos na página de detalhes do leitor (`/admin/leitores/:id`), na tabela de histórico de empréstimos.
+- Botões de documentos na página de detalhes do leitor (`/admin/leitores/:id`), na tabela de histórico de empréstimos, e no portal (`/minha-conta`, só próprios).
 - Termo de Devolução só disponível para empréstimos devolvidos (`returnedAt` preenchido).

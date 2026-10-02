@@ -15,7 +15,9 @@ model User {
   passwordHash String
   role         String     @default("ATTENDANT")
   status       String     @default("ACTIVE")
-  createdAt    DateTime   @default(now())
+  signature    String?
+  signatureUpdatedAt DateTime?
+  createdAt    DateTime       @default(now())
   updatedAt    DateTime   @updatedAt
   loans           Loan[]
   logs            AuditLog[]
@@ -147,6 +149,9 @@ model Loan {
   loanSignedAt           DateTime?
   returnSignature        String?
   returnSignedAt         DateTime?
+  createdBySignatureSnapshot String?
+  receivedBySignatureSnapshot String?
+  returnGroup String?
 
   reader     Reader     @relation(fields: [readerId], references: [id])
   book       Book       @relation(fields: [bookId], references: [id])
