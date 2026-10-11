@@ -56,7 +56,7 @@ Para empréstimos criados antes da implementação dos snapshots, os termos PDF 
 
 ### Assinatura salva do leitor
 
-- Cada leitor pode ter uma assinatura salva (`signature`/`signatureUpdatedAt`, via `PATCH /readers/:id/signature` ou automaticamente ao desenhar nova em empréstimo/devolução).
+- Cada leitor pode ter uma assinatura salva (`signature`/`signatureUpdatedAt` + metadados de aparência `signatureType`/`signatureText`/`rubricText`/`rubricImage`/`fontFamily`, idem da equipe), gerida pelo próprio leitor no portal `/minha-conta` (`PATCH`/`DELETE /readers/me/signature`) **e** pelo balcão na aba assinatura de `/admin/leitores/:id` (`PATCH /readers/:id/signature`, `signature: null` remove) — ambos com o mesmo editor de aparência (Texto/Desenhar/Imagem + rubrica) usado em `/admin/perfil`. Ao desenhar nova em empréstimo/devolução os metadados são limpos (o PNG novo não tem aparência reeditável).
 - Com salva existente, o Step 3 e o modal de devolução oferecem escolha explícita: **Usar salva** (miniatura) ou **Assinar novamente** (a nova vira a salva).
 - `useSavedSignature: true` reaproveita sem redesenhar; sem salva, `400` pedindo desenho.
 - Exclusão LGPD apaga a assinatura junto dos dados pessoais.
@@ -150,6 +150,7 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 - Usuário inativo não autentica (o `requireAuth` rejeita status ≠ `ACTIVE`).
 - Primeiro acesso: criado no seed a partir de `ADMIN_EMAIL`/`ADMIN_PASSWORD` (não há credenciais padrão). Perfis adicionais são criados pela tela Usuários.
 - Assinatura da equipe (`/admin/usuarios`, ADMIN): modal exclusivo via botão **Assinatura** na tabela (separado do cadastro/edição) — mostra a salva, desenhar substitui, botão remove. Salva em `signature`/`signatureUpdatedAt` (`PATCH /users/:id/signature`). A salva do operador da operação é congelada no empréstimo/devolução (`createdBySignatureSnapshot`/`receivedBySignatureSnapshot`) e incorporada na coluna do responsável nos Termos (fallback p/ linhas manuais).
+- Aparência da assinatura (`/admin/perfil`, qualquer papel — self-service via `PATCH /users/me/signature`): o campo `signature` continua sendo o PNG final (PDFs e `<img>` intactos); os metadados de aparência (`signatureType` TEXT/DRAW/IMAGE, `signatureText`, `rubricText`, `rubricImage`, `fontFamily`) permitem reeditar. Texto e rubrica são renderizados em fontes manuscritas (Google Fonts); Imagem converte upload para PNG no cliente (o backend só aceita `data:image/png`). Remover a assinatura limpa os metadados.
 
 ## Portal do leitor (autocadastro)
 

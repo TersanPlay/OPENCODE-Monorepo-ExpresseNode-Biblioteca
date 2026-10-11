@@ -10,7 +10,10 @@ import { Skeleton } from '../../components/ui/skeleton';
 import { LoanStatusBadge, ReservationStatusBadge } from '../../components/ui/status-badge';
 import { TD, TH, TBody, THead, TR, Table } from '../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { SignaturePad, type SignaturePadHandle } from '../../features/loans/components/signature-pad';
+import {
+  AppearanceEditor,
+  type AppearanceEditorHandle,
+} from '../../features/signature/appearance-editor';
 import { readerPortalApi } from '../../features/readers/portal-api';
 import { useReaderSession } from '../../features/readers/reader-session';
 import { useAsyncData } from '../../features/hooks/use-async-data';
@@ -30,7 +33,7 @@ export function ReaderAccountPage() {
   const [pwd, setPwd] = useState({ currentPassword: '', password: '', confirm: '' });
   const [sigBusy, setSigBusy] = useState(false);
   const [confirmingSigDelete, setConfirmingSigDelete] = useState(false);
-  const sigPadRef = useRef<SignaturePadHandle>(null);
+  const sigEditorRef = useRef<AppearanceEditorHandle>(null);
 
   useEffect(() => {
     if (reader) setForm({ name: reader.name, phone: reader.phone ?? '', email: reader.email ?? '' });
@@ -86,15 +89,11 @@ export function ReaderAccountPage() {
   };
 
   const saveSignature = async () => {
-    const drawn = sigPadRef.current?.toDataURL();
-    if (!drawn) {
-      toast('error', 'Desenhe a assinatura antes de salvar');
-      return;
-    }
+    const value = await sigEditorRef.current?.resolve();
+    if (!value) return;
     setSigBusy(true);
     try {
-      await readerPortalApi.setMySignature(drawn);
-      sigPadRef.current?.clear();
+      await readerPortalApi.setMySignature(value);
       await refresh();
       toast('success', 'Assinatura salva');
     } catch (err) {
@@ -289,21 +288,38 @@ export function ReaderAccountPage() {
                   <img
                     src={reader.signature}
                     alt="Assinatura atual"
-                    className="mt-1 h-24 w-full rounded-small border border-black/10 bg-white object-contain"
+                    className="mt-1 aspect-[13/4] w-full rounded-small border border-black/10 bg-white object-contain"
                   />
+                  {reader.rubricImage && (
+                    <img
+                      src={reader.rubricImage}
+                      alt="Rubrica atual"
+                      className="mt-2 h-14 w-32 rounded-small border border-black/10 bg-white object-contain"
+                    />
+                  )}
                 </div>
               ) : (
                 <p className="rounded-card bg-surfaceBlue2 px-4 py-3 text-[12.5px] text-primary-dark">
-                  Nenhuma assinatura registrada. Desenhe abaixo para cadastrar.
+                  Nenhuma assinatura registrada. Crie abaixo para cadastrar.
                 </p>
               )}
-              <SignaturePad
-                ref={sigPadRef}
-                label="Editar assinatura"
-                hint="Assine e clique em Salvar para substituir a atual."
+              <AppearanceEditor
+                ref={sigEditorRef}
+                initial={
+                  reader?.signature
+                    ? {
+                        signature: reader.signature,
+                        signatureType: reader.signatureType,
+                        signatureText: reader.signatureText,
+                        rubricText: reader.rubricText,
+                        rubricImage: reader.rubricImage,
+                        fontFamily: reader.fontFamily,
+                      }
+                    : null
+                }
               />
               <div className="flex flex-wrap gap-2">
-                <Button onClick={saveSignature} loading={sigBusy}>
+                <Button onClick={() => void saveSignature()} loading={sigBusy}>
                   <PenLine className="size-4" /> Salvar assinatura
                 </Button>
                 {reader?.signature && (

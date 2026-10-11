@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Dancing+Script:wght@400;600&family=Great+Vibes&family=Homemade+Apple&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -67,6 +69,9 @@
   .anim-flow-rev {
     animation: anim-flow-rev 0.9s linear infinite;
   }
+  .anim-note {
+    animation: anim-note 2.4s ease-in-out infinite;
+  }
   .reveal {
     opacity: 0;
     transform: translateY(14px);
@@ -121,9 +126,20 @@
   }
 }
 
+@keyframes anim-note {
+  0%,
+  100% {
+    background-color: rgba(8, 127, 140, 0.08);
+  }
+  50% {
+    background-color: rgba(8, 127, 140, 0.2);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .anim-flow,
-  .anim-flow-rev {
+  .anim-flow-rev,
+  .anim-note {
     animation: none;
   }
 }

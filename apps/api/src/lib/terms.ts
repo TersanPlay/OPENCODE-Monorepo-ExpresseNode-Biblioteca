@@ -214,7 +214,7 @@ export function generateLoanTermPDF(loan: LoanTermData, settings: LibrarySetting
     doc.restore();
   });
 
-  y = section(doc, y, '5. Assinaturas', (doc) => {
+  section(doc, y, '5. Assinaturas', (doc) => {
     const sy = doc.y + 6;
     const sigH = 42;
     if (loan.loanSignature && drawSignature(doc, loan.loanSignature, 60, sy, 200, sigH)) {
@@ -346,7 +346,7 @@ export function generateReturnTermPDF(loan: LoanTermData, settings: LibrarySetti
     ], doc.y);
   });
 
-  y = section(doc, y, '7. Assinaturas', (doc) => {
+  section(doc, y, '7. Assinaturas', (doc) => {
     const sy = doc.y + 6;
     const sigH = 42;
     if (loan.returnSignature && drawSignature(doc, loan.returnSignature, 60, sy, 200, sigH)) {
@@ -467,7 +467,7 @@ export function generateBatchReturnTermPDF(loans: LoanTermData[], settings: Libr
     ], doc.y);
   });
 
-  y = section(doc, y, '6. Assinaturas', (doc) => {
+  section(doc, y, '6. Assinaturas', (doc) => {
     const sy = doc.y + 6;
     const sigH = 42;
     if (returnSig && drawSignature(doc, returnSig, 60, sy, 200, sigH)) {

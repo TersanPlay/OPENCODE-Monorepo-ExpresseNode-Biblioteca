@@ -77,6 +77,15 @@ export const resetPasswordSchema = z.object({
   currentPassword: z.string().optional(),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email('e-mail inválido').toLowerCase(),
+});
+
+export const resetPasswordWithTokenSchema = z.object({
+  token: z.string().trim().min(20, 'token inválido'),
+  password: z.string().min(6, 'senha deve ter no mínimo 6 caracteres'),
+});
+
 export const strOpt = z.string().trim().nullish();
 export const intOpt = z.coerce.number().int().nullish();
 export const emailOpt = z.string().trim().email('e-mail inválido').toLowerCase().nullish();
@@ -247,18 +256,27 @@ export const loanReturnBatchSchema = z.object({
   useSavedSignature: z.boolean().optional(),
 });
 
+// Aparência da assinatura (metadados p/ reedição; o PNG final fica em `signature`).
+export const signatureAppearanceMeta = {
+  signatureType: z.enum(['TEXT', 'DRAW', 'IMAGE']).nullish(),
+  signatureText: z.string().trim().max(80).nullish(),
+  rubricText: z.string().trim().max(10).nullish(),
+  rubricImage: signatureDataUrl,
+  fontFamily: z.string().trim().max(60).nullish(),
+};
+
+// Assinatura do leitor: PNG data-URL (ou null para remover) + metadados de aparência.
+// Usada pelo portal (PATCH /readers/me/signature) e pelo balcão (PATCH /readers/:id/signature).
 export const readerSignatureSchema = z.object({
-  signature: z
-    .string()
-    .trim()
-    .min(1, 'Assinatura obrigatória')
-    .max(700000, 'Assinatura muito grande')
-    .refine((v) => /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(v), 'Assinatura inválida'),
+  signature: signatureDataUrl,
+  ...signatureAppearanceMeta,
 });
 
 // Assinatura da equipe: define, substitui ou remove (null) — opcional no fluxo.
+// Remover a assinatura também limpa os metadados de aparência (feito no backend).
 export const userSignatureSchema = z.object({
   signature: signatureDataUrl,
+  ...signatureAppearanceMeta,
 });
 
 export const reservationCreateSchema = z.object({

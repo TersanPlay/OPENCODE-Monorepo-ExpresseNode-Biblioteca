@@ -9,6 +9,43 @@ import { parse, userCreateSchema, userQuerySchema, userSignatureSchema, userUpda
 
 export const userRouter = Router();
 
+// Perfil do usuário logado (qualquer papel) — registrado antes do guard ADMIN e de /:id.
+userRouter.get(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, updatedAt: true, signature: true, signatureUpdatedAt: true, signatureType: true, signatureText: true, rubricText: true, rubricImage: true, fontFamily: true },
+    });
+    if (!user) throw new HttpError(404, 'Usuário não encontrado');
+    res.json(user);
+  }),
+);
+
+userRouter.patch(
+  '/me/signature',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const data = parse(userSignatureSchema, req.body);
+    const hasSig = !!data.signature;
+    const user = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: {
+        signature: data.signature ?? null,
+        signatureUpdatedAt: hasSig ? new Date() : null,
+        signatureType: hasSig ? (data.signatureType ?? null) : null,
+        signatureText: hasSig ? (data.signatureText ?? null) : null,
+        rubricText: hasSig ? (data.rubricText ?? null) : null,
+        rubricImage: hasSig ? (data.rubricImage ?? null) : null,
+        fontFamily: hasSig ? (data.fontFamily ?? null) : null,
+      },
+    });
+    await writeAudit(req.user?.id, 'USER_UPDATED', 'User', user.id, { self: true, signature: hasSig }, req.ip);
+    res.json({ id: user.id, signature: user.signature, signatureUpdatedAt: user.signatureUpdatedAt, signatureType: user.signatureType, signatureText: user.signatureText, rubricText: user.rubricText, rubricImage: user.rubricImage, fontFamily: user.fontFamily });
+  }),
+);
+
 userRouter.use(requireAuth, requireRoles('ADMIN'));
 
 userRouter.get(
@@ -23,7 +60,7 @@ userRouter.get(
     const total = await prisma.user.count({ where });
     const items = await prisma.user.findMany({
       where,
-      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, signature: true, signatureUpdatedAt: true },
+      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, signature: true, signatureUpdatedAt: true, signatureType: true, signatureText: true, rubricText: true, rubricImage: true, fontFamily: true },
       orderBy: { name: 'asc' },
       skip: (q.page - 1) * q.pageSize,
       take: q.pageSize,
@@ -57,7 +94,7 @@ userRouter.get(
     const id = Number(req.params.id);
     const user = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, updatedAt: true, signature: true, signatureUpdatedAt: true },
+      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, updatedAt: true, signature: true, signatureUpdatedAt: true, signatureType: true, signatureText: true, rubricText: true, rubricImage: true, fontFamily: true },
     });
     if (!user) throw new HttpError(404, 'Usuário não encontrado');
     res.json(user);
@@ -100,12 +137,21 @@ userRouter.patch(
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, 'Usuário não encontrado');
     const sig = data.signature ? data.signature : null;
+    const hasSig = !!sig;
     const user = await prisma.user.update({
       where: { id },
-      data: { signature: sig, signatureUpdatedAt: sig ? new Date() : null },
+      data: {
+        signature: sig,
+        signatureUpdatedAt: hasSig ? new Date() : null,
+        signatureType: hasSig ? (data.signatureType ?? null) : null,
+        signatureText: hasSig ? (data.signatureText ?? null) : null,
+        rubricText: hasSig ? (data.rubricText ?? null) : null,
+        rubricImage: hasSig ? (data.rubricImage ?? null) : null,
+        fontFamily: hasSig ? (data.fontFamily ?? null) : null,
+      },
     });
-    await writeAudit(req.user?.id, 'USER_UPDATED', 'User', id, { signature: !!sig }, req.ip);
-    res.json({ id: user.id, signature: user.signature, signatureUpdatedAt: user.signatureUpdatedAt });
+    await writeAudit(req.user?.id, 'USER_UPDATED', 'User', id, { signature: hasSig }, req.ip);
+    res.json({ id: user.id, signature: user.signature, signatureUpdatedAt: user.signatureUpdatedAt, signatureType: user.signatureType, signatureText: user.signatureText, rubricText: user.rubricText, rubricImage: user.rubricImage, fontFamily: user.fontFamily });
   }),
 );
 

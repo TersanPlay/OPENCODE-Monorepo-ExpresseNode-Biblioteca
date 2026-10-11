@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PenLine, Plus, Search, UserCog } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -20,7 +21,10 @@ import { Skeleton } from '../../../components/ui/skeleton';
 import { UserStatusBadge } from '../../../components/ui/status-badge';
 import { TD, TH, TBody, THead, TR, Table } from '../../../components/ui/table';
 import { usersApi } from '../../api';
-import { SignaturePad, type SignaturePadHandle } from '../../loans/components/signature-pad';
+import {
+  AppearanceEditor,
+  type AppearanceEditorHandle,
+} from '../../signature/appearance-editor';
 import { useAsyncData } from '../../hooks/use-async-data';
 import { useDebounce } from '../../hooks/use-debounce';
 import { useAuth } from '../../auth/auth-provider';
@@ -49,7 +53,7 @@ export function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [sigUser, setSigUser] = useState<User | null>(null);
   const [sigBusy, setSigBusy] = useState(false);
-  const modalSigRef = useRef<SignaturePadHandle>(null);
+  const sigEditorRef = useRef<AppearanceEditorHandle>(null);
   const { toast } = useApiToast();
   const { user: me } = useAuth();
 
@@ -100,13 +104,12 @@ export function UsersPage() {
 
   const saveSignature = async () => {
     if (!sigUser) return;
-    const drawn = modalSigRef.current?.toDataURL();
-    if (!drawn) return;
+    const value = await sigEditorRef.current?.resolve();
+    if (!value) return;
     setSigBusy(true);
     try {
-      const updated = await usersApi.setSignature(sigUser.id, drawn);
-      setSigUser({ ...sigUser, signature: updated.signature ?? null });
-      modalSigRef.current?.clear();
+      const updated = await usersApi.setSignature(sigUser.id, value);
+      setSigUser({ ...sigUser, ...updated });
       toast.success('Assinatura salva');
       refetch();
     } catch (err) {
@@ -120,8 +123,16 @@ export function UsersPage() {
     if (!sigUser?.signature) return;
     setSigBusy(true);
     try {
-      await usersApi.setSignature(sigUser.id, null);
-      setSigUser({ ...sigUser, signature: null });
+      await usersApi.setSignature(sigUser.id, { signature: null });
+      setSigUser({
+        ...sigUser,
+        signature: null,
+        signatureType: null,
+        signatureText: null,
+        rubricText: null,
+        rubricImage: null,
+        fontFamily: null,
+      });
       toast.success('Assinatura removida');
       refetch();
     } catch (err) {
@@ -198,7 +209,9 @@ export function UsersPage() {
                     <TR key={u.id}>
                       <TD>
                         <p className="font-bold text-ink">
-                          {u.name}
+                          <Link to={`/admin/usuarios/${u.id}`} className="hover:text-primary">
+                            {u.name}
+                          </Link>
                           {u.id === me?.id && <span className="ml-2 text-[11px] font-semibold text-primary">(você)</span>}
                         </p>
                         <p className="font-mono text-[12px] text-muted">{u.email}</p>
@@ -294,14 +307,31 @@ export function UsersPage() {
             {sigUser?.signature ? (
               <div className="mb-4">
                 <Label>Assinatura salva</Label>
-                <img src={sigUser.signature} alt="Assinatura salva" className="mt-1 h-16 w-full rounded-small border border-black/10 bg-white object-contain" />
+                <img src={sigUser.signature} alt="Assinatura salva" className="mt-1 aspect-[13/4] w-full rounded-small border border-black/10 bg-white object-contain" />
+                {sigUser.rubricImage && (
+                  <img src={sigUser.rubricImage} alt="Rubrica salva" className="mt-2 h-12 w-28 rounded-small border border-black/10 bg-white object-contain" />
+                )}
               </div>
             ) : (
               <p className="mb-4 rounded-card bg-surfaceBlue2 px-4 py-3 text-[12.5px] text-primary-dark">
-                Nenhuma assinatura salva. Desenhe abaixo para cadastrar.
+                Nenhuma assinatura salva. Crie abaixo para cadastrar.
               </p>
             )}
-            <SignaturePad ref={modalSigRef} label="Desenhar nova assinatura" hint="Substitui a salva ao clicar em Salvar." />
+            <AppearanceEditor
+              ref={sigEditorRef}
+              initial={
+                sigUser?.signature
+                  ? {
+                      signature: sigUser.signature,
+                      signatureType: sigUser.signatureType,
+                      signatureText: sigUser.signatureText,
+                      rubricText: sigUser.rubricText,
+                      rubricImage: sigUser.rubricImage,
+                      fontFamily: sigUser.fontFamily,
+                    }
+                  : null
+              }
+            />
           </DialogBody>
           <DialogFooter>
             {sigUser?.signature && (

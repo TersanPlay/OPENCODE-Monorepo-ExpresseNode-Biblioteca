@@ -230,6 +230,8 @@ readerRouter.patch(
   }),
 );
 
+// Balcão gerencia a assinatura do leitor (aba assinatura de /admin/leitores/:id) —
+// mesmo modelo de aparência do perfil da equipe; `signature: null` remove e limpa metadados.
 readerRouter.patch(
   '/:id/signature',
   asyncHandler(async (req, res) => {
@@ -238,11 +240,21 @@ readerRouter.patch(
     const existing = await prisma.reader.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, 'Leitor não encontrado');
     if (existing.deletedAt) throw new HttpError(409, 'Leitor excluído não pode ter assinatura alterada');
+    const sig = data.signature ? data.signature : null;
+    const hasSig = !!sig;
     const reader = await prisma.reader.update({
       where: { id },
-      data: { signature: data.signature, signatureUpdatedAt: new Date() },
+      data: {
+        signature: sig,
+        signatureUpdatedAt: hasSig ? new Date() : null,
+        signatureType: hasSig ? (data.signatureType ?? null) : null,
+        signatureText: hasSig ? (data.signatureText ?? null) : null,
+        rubricText: hasSig ? (data.rubricText ?? null) : null,
+        rubricImage: hasSig ? (data.rubricImage ?? null) : null,
+        fontFamily: hasSig ? (data.fontFamily ?? null) : null,
+      },
     });
-    await writeAudit(req.user?.id, 'READER_UPDATED', 'Reader', id, { signature: true }, req.ip);
+    await writeAudit(req.user?.id, 'READER_UPDATED', 'Reader', id, { signature: hasSig }, req.ip);
     res.json(reader);
   }),
 );
@@ -309,6 +321,11 @@ readerRouter.delete(
           blockedBy: null,
           signature: null,
           signatureUpdatedAt: null,
+          signatureType: null,
+          signatureText: null,
+          rubricText: null,
+          rubricImage: null,
+          fontFamily: null,
           passwordHash: null,
           deletedAt: new Date(),
           anonymizedAt: new Date(),

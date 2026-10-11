@@ -15,6 +15,7 @@ interface SignaturePadProps {
   label?: string;
   hint?: string;
   error?: string | null;
+  height?: number;
   onChange?: (empty: boolean) => void;
 }
 
@@ -25,6 +26,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(fu
     label = 'Assinatura do leitor',
     hint = 'Assine com mouse, dedo ou caneta. Use Limpar para refazer.',
     error,
+    height = PAD_HEIGHT,
     onChange,
   },
   ref,
@@ -34,6 +36,8 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(fu
   const padRef = useRef<SignaturePadLib | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const heightRef = useRef(height);
+  heightRef.current = height;
   const [empty, setEmpty] = useState(true);
 
   useEffect(() => {
@@ -50,7 +54,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(fu
     const resize = () => {
       const ratio = Math.max(window.devicePixelRatio || 1, 1);
       canvas.width = Math.max(1, Math.floor(wrap.clientWidth * ratio));
-      canvas.height = Math.floor(PAD_HEIGHT * ratio);
+      canvas.height = Math.floor(heightRef.current * ratio);
       canvas.getContext('2d')?.scale(ratio, ratio);
       pad.clear();
       sync();
@@ -92,7 +96,11 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(fu
         </Button>
       </div>
       <div ref={wrapRef} className="overflow-hidden rounded-card bg-white hairline">
-        <canvas ref={canvasRef} className="block h-[180px] w-full touch-none cursor-crosshair" />
+        <canvas
+          ref={canvasRef}
+          style={{ height }}
+          className="block w-full touch-none cursor-crosshair"
+        />
       </div>
       <p className={`mt-1 text-[12px] ${error ? 'font-semibold text-destructive' : 'text-muted'}`}>
         {error ?? hint}

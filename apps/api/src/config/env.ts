@@ -33,6 +33,27 @@ export const env = {
   get NODE_ENV(): string {
     return process.env.NODE_ENV || 'development';
   },
+  get SMTP_HOST(): string {
+    return process.env.SMTP_HOST?.trim() || 'smtp.zoho.com';
+  },
+  get SMTP_PORT(): number {
+    return Number(process.env.SMTP_PORT || 465);
+  },
+  get SMTP_USER(): string | null {
+    return process.env.ZOHO_EMAIL?.trim() || process.env.SMTP_USER?.trim() || null;
+  },
+  get SMTP_PASS(): string | null {
+    return process.env.ZOHO_APP_PASSWORD?.trim() || process.env.SMTP_PASS?.trim() || null;
+  },
+  get MAIL_FROM(): string | null {
+    return process.env.MAIL_FROM?.trim() || this.SMTP_USER;
+  },
+  get FRONTEND_URL(): string {
+    return (process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:5173')
+      .split(',')
+      .map((s) => s.trim().replace(/\/$/, ''))
+      .filter(Boolean)[0] as string;
+  },
 };
 
 export function jwtSecret(): string {

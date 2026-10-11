@@ -25,6 +25,8 @@ export interface Paginated<T> {
   totalPages: number;
 }
 
+export type SignatureType = 'TEXT' | 'DRAW' | 'IMAGE';
+
 export interface User {
   id: number;
   name: string;
@@ -34,6 +36,11 @@ export interface User {
   createdAt: string;
   signature?: string | null;
   signatureUpdatedAt?: string | null;
+  signatureType?: SignatureType | null;
+  signatureText?: string | null;
+  rubricText?: string | null;
+  rubricImage?: string | null;
+  fontFamily?: string | null;
 }
 
 export interface Author {
@@ -109,6 +116,11 @@ export interface Reader {
   activeLoans?: number;
   signature?: string | null;
   signatureUpdatedAt?: string | null;
+  signatureType?: SignatureType | null;
+  signatureText?: string | null;
+  rubricText?: string | null;
+  rubricImage?: string | null;
+  fontFamily?: string | null;
 }
 
 export interface BlockedReader extends Reader {

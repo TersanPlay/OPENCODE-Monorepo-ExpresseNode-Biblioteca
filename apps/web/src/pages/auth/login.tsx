@@ -142,6 +142,12 @@ export function LoginPage() {
                 <KeyRound className="size-4" />
                 Entrar
               </Button>
+              <Link
+                to="/esqueci-senha"
+                className="block w-full text-center text-[12.5px] font-semibold text-primary hover:text-primary-dark"
+              >
+                Esqueci minha senha
+              </Link>
               <button
                 type="button"
                 onClick={() => { setClaiming(true); setError(null); }}
@@ -241,6 +247,12 @@ export function LoginPage() {
                 <KeyRound className="size-4" />
                 Entrar
               </Button>
+              <Link
+                to="/esqueci-senha"
+                className="block w-full text-center text-[12.5px] font-semibold text-primary hover:text-primary-dark"
+              >
+                Esqueci minha senha
+              </Link>
             </form>
           )}
 

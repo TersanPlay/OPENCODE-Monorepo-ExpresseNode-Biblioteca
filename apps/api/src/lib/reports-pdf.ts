@@ -88,7 +88,7 @@ export function generateReportPDF(data: ReportPdfData): typeof PDFDocument {
   data.rows.forEach((row, ri) => {
     const cells = data.columns.map((_, i) => fmtCell(row[i] ?? null));
     doc.fontSize(7.5).font(F.regular);
-    const heights = cells.map((t, i) => doc.heightOfString(t, { width: colW - 8 }));
+    const heights = cells.map((t, _i) => doc.heightOfString(t, { width: colW - 8 }));
     const h = Math.max(16, ...heights) + 6;
     if (doc.y + h > bottom) {
       doc.addPage();

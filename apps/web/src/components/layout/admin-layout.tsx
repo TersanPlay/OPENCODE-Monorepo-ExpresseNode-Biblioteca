@@ -4,6 +4,7 @@ import {
   DoorOpen,
   LogOut,
   Menu,
+  UserRound,
   X,
 } from 'lucide-react';
 import {
@@ -57,6 +58,12 @@ const navSections: {
       { to: '/admin/etiquetas', label: 'Etiquetas', icon: FcPrint, adminOnly: false },
       { to: '/admin/autores', label: 'Autores', icon: FcPortraitMode, adminOnly: true },
       { to: '/admin/categorias', label: 'Categorias', icon: FcOpenedFolder, adminOnly: true },
+    ],
+  },
+  {
+    label: 'Conta',
+    items: [
+      { to: '/admin/perfil', label: 'Meu perfil', icon: UserRound, adminOnly: false },
     ],
   },
   {
@@ -157,6 +164,10 @@ export function AdminLayout() {
             <DropdownMenuContent>
               <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => navigate('/admin/perfil')}>
+                <UserRound className="size-4" />
+                Meu perfil
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => navigate('/')}>
                 <BookOpen className="size-4" />
                 Ver site público

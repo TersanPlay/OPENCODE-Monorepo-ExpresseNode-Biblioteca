@@ -17,6 +17,12 @@ model User {
   status       String     @default("ACTIVE")
   signature    String?
   signatureUpdatedAt DateTime?
+  // Aparência da assinatura (metadados para reedição; `signature` segue sendo o PNG final)
+  signatureType   String?   // TEXT | DRAW | IMAGE
+  signatureText   String?
+  rubricText      String?
+  rubricImage     String?   // PNG data-URL da rubrica
+  fontFamily      String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime   @updatedAt
   loans           Loan[]
@@ -47,6 +53,11 @@ model Reader {
   blockedByUser User?         @relation("BlockedReaders", fields: [blockedBy], references: [id])
   signature    String?
   signatureUpdatedAt DateTime?
+  signatureType   String?   // TEXT | DRAW | IMAGE
+  signatureText   String?
+  rubricText      String?
+  rubricImage     String?
+  fontFamily      String?
   passwordHash String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -209,4 +220,17 @@ model Setting {
   libraryEmail    String?
   libraryHours    String?
   updatedAt       DateTime @updatedAt
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  email     String
+  scope     String    @default("USER")
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
 }

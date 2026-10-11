@@ -7,7 +7,10 @@ import { asyncHandler } from '../../middleware/async-handler';
 import { loginLimiter } from '../../middleware/login-rate-limit';
 import { requireAuth, signToken } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
-import { loginSchema, parse } from '../../validation';
+import { env } from '../../config/env';
+import { passwordResetEmail, sendEmail } from '../../lib/mail';
+import { consumeResetToken, createResetToken } from '../../lib/password-reset';
+import { forgotPasswordSchema, loginSchema, parse, resetPasswordWithTokenSchema } from '../../validation';
 
 export const authRouter = Router();
 
@@ -59,6 +62,43 @@ authRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     await writeAudit(req.user?.id, 'LOGOUT', 'User', req.user?.id, undefined, req.ip);
+    res.json({ ok: true });
+  }),
+);
+
+const GENERIC_FORGOT_MESSAGE = 'Se o e-mail estiver cadastrado, enviamos as instruções de recuperação.';
+
+authRouter.post(
+  '/forgot-password',
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const data = parse(forgotPasswordSchema, req.body);
+    const user = await prisma.user.findUnique({ where: { email: data.email } });
+    if (user && user.status === 'ACTIVE') {
+      const raw = await createResetToken(user.email, 'USER');
+      const link = `${env.FRONTEND_URL}/redefinir-senha?token=${raw}&tipo=equipe`;
+      const content = passwordResetEmail(user.name, link);
+      await sendEmail({ to: user.email, ...content });
+      await writeAudit(user.id, 'PASSWORD_RESET_REQUESTED', 'User', user.id, undefined, req.ip);
+    }
+    res.json({ ok: true, message: GENERIC_FORGOT_MESSAGE });
+  }),
+);
+
+authRouter.post(
+  '/reset-password',
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const data = parse(resetPasswordWithTokenSchema, req.body);
+    const record = await consumeResetToken(data.token, 'USER');
+    if (!record) throw new HttpError(400, 'Link inválido ou expirado');
+    const user = await prisma.user.findUnique({ where: { email: record.email } });
+    if (!user || user.status !== 'ACTIVE') throw new HttpError(400, 'Link inválido ou expirado');
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: bcrypt.hashSync(data.password, 10) },
+    });
+    await writeAudit(user.id, 'PASSWORD_RESET_DONE', 'User', user.id, undefined, req.ip);
     res.json({ ok: true });
   }),
 );

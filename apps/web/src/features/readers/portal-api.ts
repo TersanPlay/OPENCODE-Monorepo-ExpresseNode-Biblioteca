@@ -19,8 +19,15 @@ export const readerPortalApi = {
     apiReader.put<{ reader: Reader }>('/readers/me', v).then((r) => r.data.reader),
   changePassword: (currentPassword: string, password: string) =>
     apiReader.post<{ ok: boolean }>('/readers/me/password', { currentPassword, password }).then((r) => r.data),
-  setMySignature: (signature: string) =>
-    apiReader.patch<{ reader: Reader }>('/readers/me/signature', { signature }).then((r) => r.data.reader),
+  setMySignature: (v: {
+    signature: string;
+    signatureType?: string | null;
+    signatureText?: string | null;
+    rubricText?: string | null;
+    rubricImage?: string | null;
+    fontFamily?: string | null;
+  }) =>
+    apiReader.patch<{ reader: Reader }>('/readers/me/signature', v).then((r) => r.data.reader),
   deleteMySignature: () =>
     apiReader.delete<{ reader: Reader }>('/readers/me/signature').then((r) => r.data.reader),
   myLoans: () => apiReader.get<ReaderLoans>('/readers/me/loans').then((r) => r.data),

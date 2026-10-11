@@ -21,8 +21,15 @@ export const readersApi = {
     api.delete<{ ok: boolean }>(`/readers/${id}`, { data: { reason } }).then((r) => r.data),
   blocked: (params?: Params) =>
     api.get<Paginated<BlockedReader>>('/readers/blocked', { params }).then((r) => r.data),
-  setSignature: (id: number, signature: string) =>
-    api.patch<Reader>(`/readers/${id}/signature`, { signature }).then((r) => r.data),
+  setSignature: (id: number, v: {
+    signature: string | null;
+    signatureType?: string | null;
+    signatureText?: string | null;
+    rubricText?: string | null;
+    rubricImage?: string | null;
+    fontFamily?: string | null;
+  }) =>
+    api.patch<Reader>(`/readers/${id}/signature`, v).then((r) => r.data),
   setReaderPassword: (id: number, password: string) =>
     api.post<{ ok: boolean }>(`/readers/${id}/password`, { password }).then((r) => r.data),
 };

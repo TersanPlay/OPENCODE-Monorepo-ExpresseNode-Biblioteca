@@ -67,7 +67,7 @@ async function performReturn(
   if (sig) {
     await db.reader.update({
       where: { id: loan.readerId },
-      data: { signature: sig, signatureUpdatedAt: now },
+      data: { signature: sig, signatureUpdatedAt: now, signatureType: null, signatureText: null, rubricText: null, rubricImage: null, fontFamily: null },
     });
   } else if (input.useSavedSignature) {
     const r = await db.reader.findUnique({ where: { id: loan.readerId } });
@@ -171,7 +171,10 @@ async function resolveLoanSignature(
 ): Promise<string | null> {
   const drawn = data.signature ? data.signature : null;
   if (drawn) {
-    await tx.reader.update({ where: { id: readerId }, data: { signature: drawn, signatureUpdatedAt: new Date() } });
+    await tx.reader.update({
+      where: { id: readerId },
+      data: { signature: drawn, signatureUpdatedAt: new Date(), signatureType: null, signatureText: null, rubricText: null, rubricImage: null, fontFamily: null },
+    });
     return drawn;
   }
   if (data.useSavedSignature) {

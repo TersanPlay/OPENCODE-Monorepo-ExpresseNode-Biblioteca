@@ -321,6 +321,140 @@ async function main() {
     r = await j('/api/users', { headers: auth(attendantToken) });
     r.status === 403 ? ok('RBAC: atendente sem usuários') : fail('RBAC atendente usuários', r);
 
+    // Perfil do usuário logado + assinatura com metadados de aparência
+    r = await j('/api/users/me', { headers: auth(attendantToken) });
+    r.status === 200 && r.body?.email === FIX_ATTENDANT.email ? ok('perfil: GET /users/me') : fail('perfil GET /me', r);
+    const attendantId = r.body?.id as number;
+
+    const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    r = await j('/api/users/me/signature', {
+      method: 'PATCH',
+      headers: auth(attendantToken),
+      body: JSON.stringify({ signature: TINY_PNG, signatureType: 'TEXT', signatureText: 'Atend Teste', rubricText: 'AT', rubricImage: TINY_PNG, fontFamily: 'Caveat' }),
+    });
+    r.status === 200 && r.body?.signatureType === 'TEXT' && r.body?.rubricText === 'AT'
+      ? ok('perfil: salvar assinatura com aparência')
+      : fail('perfil salvar assinatura', r);
+
+    r = await j('/api/users/me', { headers: auth(attendantToken) });
+    r.status === 200 && r.body?.signature === TINY_PNG && r.body?.fontFamily === 'Caveat'
+      ? ok('perfil: metadados de aparência persistidos')
+      : fail('perfil metadados', r);
+
+    r = await j('/api/users/me/signature', {
+      method: 'PATCH',
+      headers: auth(attendantToken),
+      body: JSON.stringify({ signature: 'data:image/jpeg;base64,abc', signatureType: 'TEXT' }),
+    });
+    r.status === 400 ? ok('perfil: rejeita assinatura JPEG') : fail('perfil rejeita jpeg', r);
+
+    r = await j('/api/users/me/signature', {
+      method: 'PATCH',
+      headers: auth(attendantToken),
+      body: JSON.stringify({ signature: null }),
+    });
+    r.status === 200 && r.body?.signature === null && r.body?.signatureType === null
+      ? ok('perfil: remover assinatura limpa metadados')
+      : fail('perfil remover assinatura', r);
+
+    // Gestão de assinatura de terceiros (admin) — modelo atual com aparência
+    r = await j('/api/users/' + attendantId + '/signature', {
+      method: 'PATCH',
+      headers: auth(adminToken),
+      body: JSON.stringify({ signature: TINY_PNG, signatureType: 'TEXT', signatureText: 'Terceiro Teste', rubricText: 'TT', rubricImage: TINY_PNG, fontFamily: 'Caveat' }),
+    });
+    r.status === 200 && r.body?.signatureType === 'TEXT' && r.body?.rubricText === 'TT'
+      ? ok('admin: assinatura de terceiro com aparência')
+      : fail('admin assinatura terceiro', r);
+
+    r = await j('/api/users?search=smoke.attendant', { headers: auth(adminToken) });
+    r.status === 200 && r.body?.items?.[0]?.signatureType === 'TEXT' && r.body?.items?.[0]?.fontFamily === 'Caveat'
+      ? ok('admin: listagem expõe metadados de aparência')
+      : fail('admin listagem metadados', r);
+
+    r = await j('/api/users/' + attendantId + '/signature', {
+      method: 'PATCH',
+      headers: auth(adminToken),
+      body: JSON.stringify({ signature: null }),
+    });
+    r.status === 200 && r.body?.signature === null && r.body?.signatureType === null
+      ? ok('admin: remover assinatura de terceiro limpa metadados')
+      : fail('admin remover terceiro', r);
+
+    r = await j('/api/users/' + attendantId, { headers: auth(adminToken) });
+    r.status === 200 && r.body?.email === FIX_ATTENDANT.email && !('passwordHash' in (r.body ?? {}))
+      ? ok('admin: detalhe do usuário sem senha')
+      : fail('admin detalhe usuário', r);
+
+    // Assinatura do leitor pelo balcão (aba assinatura de /admin/leitores/:id) — modelo atual
+    r = await j('/api/readers/' + readerId + '/signature', {
+      method: 'PATCH',
+      headers: auth(adminToken),
+      body: JSON.stringify({ signature: TINY_PNG, signatureType: 'TEXT', signatureText: 'Leitor Balcao', rubricText: 'LB', rubricImage: TINY_PNG, fontFamily: 'Caveat' }),
+    });
+    r.status === 200 && r.body?.signatureType === 'TEXT' && r.body?.rubricText === 'LB'
+      ? ok('balcão: assinatura do leitor com aparência')
+      : fail('balcão assinatura leitor', r);
+
+    r = await j('/api/readers/' + readerId, { headers: auth(adminToken) });
+    r.status === 200 && r.body?.reader?.signature === TINY_PNG && r.body?.reader?.fontFamily === 'Caveat'
+      ? ok('balcão: detalhe expõe aparência da assinatura')
+      : fail('balcão detalhe aparência', r);
+
+    r = await j('/api/readers/' + readerId + '/signature', {
+      method: 'PATCH',
+      headers: auth(adminToken),
+      body: JSON.stringify({ signature: null }),
+    });
+    r.status === 200 && r.body?.signature === null && r.body?.signatureType === null
+      ? ok('balcão: remover assinatura do leitor limpa metadados')
+      : fail('balcão remover assinatura', r);
+
+    // Portal do leitor: assinatura com aparência (mesmo padrão do perfil da equipe)
+    r = await j('/api/readers/' + readerId + '/password', {
+      method: 'POST',
+      headers: auth(adminToken),
+      body: JSON.stringify({ password: 'SmokePass123' }),
+    });
+    r.status === 200 ? ok('portal: definir senha do leitor fixture') : fail('portal senha leitor', r);
+
+    r = await j('/api/readers/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'smoke@test.local', password: 'SmokePass123' }),
+    });
+    const readerToken = r.body?.token;
+    readerToken ? ok('portal: login do leitor') : fail('portal login leitor', r);
+
+    r = await j('/api/readers/me/signature', {
+      method: 'PATCH',
+      headers: auth(readerToken),
+      body: JSON.stringify({ signature: TINY_PNG, signatureType: 'TEXT', signatureText: 'Leitor Smoke', rubricText: 'LS', rubricImage: TINY_PNG, fontFamily: 'Caveat' }),
+    });
+    r.status === 200 && r.body?.reader?.signatureType === 'TEXT' && r.body?.reader?.rubricText === 'LS'
+      ? ok('portal: salvar assinatura com aparência')
+      : fail('portal salvar assinatura', r);
+
+    r = await j('/api/readers/me', { headers: auth(readerToken) });
+    r.status === 200 && r.body?.reader?.signature === TINY_PNG && r.body?.reader?.fontFamily === 'Caveat'
+      ? ok('portal: metadados de aparência persistidos')
+      : fail('portal metadados', r);
+
+    r = await j('/api/readers/me/signature', {
+      method: 'PATCH',
+      headers: auth(readerToken),
+      body: JSON.stringify({ signature: 'data:image/jpeg;base64,abc', signatureType: 'DRAW' }),
+    });
+    r.status === 400 ? ok('portal: rejeita assinatura JPEG') : fail('portal rejeita jpeg', r);
+
+    r = await j('/api/readers/me/signature', {
+      method: 'DELETE',
+      headers: auth(readerToken),
+    });
+    r.status === 200 && r.body?.reader?.signature === null && r.body?.reader?.signatureType === null
+      ? ok('portal: remover assinatura limpa metadados')
+      : fail('portal remover assinatura', r);
+
     r = await j('/api/settings', {
       method: 'PUT',
       headers: auth(adminToken),

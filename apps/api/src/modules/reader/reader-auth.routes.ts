@@ -10,9 +10,13 @@ import { publicReader, requireReader, signReaderToken } from '../../lib/reader-a
 import { writeAudit } from '../../lib/audit';
 import { expireReservations, MS_PER_DAY } from '../../lib/overdue';
 import { refreshOverdue } from '../../lib/overdue';
+import { env } from '../../config/env';
+import { passwordResetEmail, sendEmail } from '../../lib/mail';
+import { consumeResetToken, createResetToken } from '../../lib/password-reset';
 import {
   cleanNull,
   dateOrNull,
+  forgotPasswordSchema,
   parse,
   readerClaimSchema,
   readerLoginSchema,
@@ -20,6 +24,7 @@ import {
   readerSelfPasswordSchema,
   readerSelfUpdateSchema,
   readerSignatureSchema,
+  resetPasswordWithTokenSchema,
 } from '../../validation';
 
 export const readerAuthRouter = Router();
@@ -160,12 +165,22 @@ readerAuthRouter.patch(
     const id = req.reader!.id;
     const data = parse(readerSignatureSchema, req.body);
     const existing = await prisma.reader.findUnique({ where: { id } });
-    if (!existing || existing.deletedAt) throw new HttpError(404, 'Leitor nǜo encontrado');
+    if (!existing || existing.deletedAt) throw new HttpError(404, 'Leitor não encontrado');
+    const sig = data.signature ? data.signature : null;
+    const hasSig = !!sig;
     const reader = await prisma.reader.update({
       where: { id },
-      data: { signature: data.signature, signatureUpdatedAt: new Date() },
+      data: {
+        signature: sig,
+        signatureUpdatedAt: hasSig ? new Date() : null,
+        signatureType: hasSig ? (data.signatureType ?? null) : null,
+        signatureText: hasSig ? (data.signatureText ?? null) : null,
+        rubricText: hasSig ? (data.rubricText ?? null) : null,
+        rubricImage: hasSig ? (data.rubricImage ?? null) : null,
+        fontFamily: hasSig ? (data.fontFamily ?? null) : null,
+      },
     });
-    await writeAudit(null, 'READER_UPDATED', 'Reader', id, { self: true, signature: true }, req.ip);
+    await writeAudit(null, 'READER_UPDATED', 'Reader', id, { self: true, signature: hasSig }, req.ip);
     res.json({ reader: publicReader(reader) });
   }),
 );
@@ -180,7 +195,15 @@ readerAuthRouter.delete(
     if (!existing || existing.deletedAt) throw new HttpError(404, 'Leitor nǜo encontrado');
     const reader = await prisma.reader.update({
       where: { id },
-      data: { signature: null, signatureUpdatedAt: null },
+      data: {
+        signature: null,
+        signatureUpdatedAt: null,
+        signatureType: null,
+        signatureText: null,
+        rubricText: null,
+        rubricImage: null,
+        fontFamily: null,
+      },
     });
     await writeAudit(null, 'READER_UPDATED', 'Reader', id, { self: true, signature: false }, req.ip);
     res.json({ reader: publicReader(reader) });
@@ -282,5 +305,42 @@ readerAuthRouter.post(
     const reservation = await prisma.reservation.update({ where: { id }, data: { status: 'CANCELLED' } });
     await writeAudit(null, 'RESERVATION_CANCELLED', 'Reservation', id, { self: true }, req.ip);
     res.json(reservation);
+  }),
+);
+
+const GENERIC_READER_FORGOT_MESSAGE = 'Se o e-mail estiver cadastrado, enviamos as instruções de recuperação.';
+
+readerAuthRouter.post(
+  '/forgot-password',
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const data = parse(forgotPasswordSchema, req.body);
+    const reader = await prisma.reader.findFirst({ where: { email: data.email, deletedAt: null } });
+    if (reader && reader.email && reader.status === 'ACTIVE' && reader.passwordHash) {
+      const raw = await createResetToken(reader.email, 'READER');
+      const link = `${env.FRONTEND_URL}/redefinir-senha?token=${raw}&tipo=leitor`;
+      const content = passwordResetEmail(reader.name, link);
+      await sendEmail({ to: reader.email, ...content });
+      await writeAudit(null, 'READER_PASSWORD_RESET_REQUESTED', 'Reader', reader.id, undefined, req.ip);
+    }
+    res.json({ ok: true, message: GENERIC_READER_FORGOT_MESSAGE });
+  }),
+);
+
+readerAuthRouter.post(
+  '/reset-password',
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const data = parse(resetPasswordWithTokenSchema, req.body);
+    const record = await consumeResetToken(data.token, 'READER');
+    if (!record) throw new HttpError(400, 'Link inválido ou expirado');
+    const reader = await prisma.reader.findFirst({ where: { email: record.email, deletedAt: null } });
+    if (!reader || reader.status !== 'ACTIVE') throw new HttpError(400, 'Link inválido ou expirado');
+    await prisma.reader.update({
+      where: { id: reader.id },
+      data: { passwordHash: bcrypt.hashSync(data.password, 10) },
+    });
+    await writeAudit(null, 'READER_PASSWORD_RESET_DONE', 'Reader', reader.id, undefined, req.ip);
+    res.json({ ok: true });
   }),
 );

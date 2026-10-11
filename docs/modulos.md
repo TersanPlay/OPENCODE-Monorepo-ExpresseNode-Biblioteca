@@ -5,7 +5,7 @@
 | Módulo | Arquivo | Prefixo | Auth no módulo |
 |---|---|---|---|
 | Auth | `auth/auth.routes.ts` | `/api/auth` | login público; me/logout exigem auth |
-| Users | `user/user.routes.ts` | `/api/users` | ADMIN (módulo inteiro) |
+| Users | `user/user.routes.ts` | `/api/users` | `/me` e `/me/signature` self-service (qualquer papel); resto ADMIN |
 | Books | `book/book.routes.ts` | `/api/books` | leitura pública (incl. `GET /cover`, público com rate-limit); escrita com auth; `GET /exists` com auth |
 | Authors | `author/author.routes.ts` | `/api/authors` | auth (qualquer staff, incl. escrita) |
 | Categories | `category/category.routes.ts` | `/api/categories` | leitura pública; `?all=1` exige auth; escrita ADMIN |
@@ -62,10 +62,12 @@
 | `/admin/leitores` | Lista de leitores (criação/edição via dialog `ReaderFormDialog`) | — |
 | `/admin/leitores/:id` | Detalhe do leitor (editar, bloquear/desbloquear, excluir, histórico) | — |
 | `/admin/blocklist` | Lista de leitores bloqueados (busca, desbloqueio em lote) | — |
+| `/admin/perfil` | Meu perfil (dados pessoais, preview do signatário e editor de aparência da assinatura: Texto/Desenhar/Imagem + rubrica + fontes) | — |
 | `/admin/autores` | Autores | `RequireAdmin` |
 | `/admin/categorias` | Categorias | `RequireAdmin` |
 | `/admin/relatorios` | Relatórios (9 tipos + exportar CSV) | `RequireAdmin` |
 | `/admin/usuarios` | Usuários do sistema | `RequireAdmin` |
+| `/admin/usuarios/:id` | Perfil do usuário (dados + editor de aparência da assinatura) | `RequireAdmin` |
 | `/admin/configuracoes` | Configurações (limites + dados institucionais) | `RequireAdmin` |
 | `/admin/auditoria` | Trilha de auditoria | `RequireAdmin` |
 | `/admin/backup` | Backup & Restauração (download, upload, criar, restaurar, excluir) | `RequireAdmin` |
@@ -89,8 +91,8 @@
 Instância staff (`api`, `livraria_token`, `auth:unauthorized` exceto `/auth/login`) + instância isolada do portal (`apiReader`, `livraria_reader_token`, `reader:unauthorized` exceto `/readers/login|/readers/register`). (`services/axios.ts` reexporta este módulo por compatibilidade.)
 
 ### `features/<dominio>/`
-Código real organizado por domínio: `api.ts` (clientes HTTP) + `pages/` (páginas). Domínios: `books`, `authors`, `categories`, `readers`, `loans`, `reservations`, `reports`, `users`, `audit`, `settings`, `dashboard`, `backups` — além de `auth/` (sessão), `hooks/` (`use-async-data`, `use-debounce`), `toast/` e `http.ts` (`Params` + `cleanPayload`).
-- `features/api.ts` — barrel que reexporta todos os clientes: `booksApi`, `authorsApi`, `categoriesApi`, `readersApi` (inclui `block`, `unblock`, `unblockBatch`, `setStatus`, `remove`, `blocked`, `setSignature`, `setReaderPassword`), `loansApi` (inclui `createBatch`), `reservationsApi`, `reportsApi`, `usersApi`, `auditApi`, `settingsApi`, `dashboardApi`, `backupsApi` (inclui `download`, `restoreUpload`). Fora do barrel: `readers/portal-api.ts` (`readerPortalApi`: register/login/claim/me/reservas/termos do dono). Payloads limpos (campos vazios removidos); livro converte `BookFormValues` → `{ authorIds, authorNames, categoryIds, categoryNames }`.
+Código real organizado por domínio: `api.ts` (clientes HTTP) + `pages/` (páginas). Domínios: `books`, `authors`, `categories`, `readers`, `loans`, `reservations`, `reports`, `users`, `audit`, `settings`, `dashboard`, `backups` — além de `auth/` (sessão), `hooks/` (`use-async-data`, `use-debounce`), `toast/`, `signature/` (`appearance-editor.tsx` com abas Texto/Desenhar/Imagem + rubrica, usado pelo perfil da equipe e pelo portal do leitor; `render.ts` com fontes manuscritas/geração de PNG) e `http.ts` (`Params` + `cleanPayload`).
+- `features/api.ts` — barrel que reexporta todos os clientes: `booksApi`, `authorsApi`, `categoriesApi`, `readersApi` (inclui `block`, `unblock`, `unblockBatch`, `setStatus`, `remove`, `blocked`, `setSignature` com aparência, `setReaderPassword`), `loansApi` (inclui `createBatch`), `reservationsApi`, `reportsApi`, `usersApi` (inclui `setSignature`/`patchMeSignature` com aparência), `auditApi`, `settingsApi`, `dashboardApi`, `backupsApi` (inclui `download`, `restoreUpload`). Fora do barrel: `readers/portal-api.ts` (`readerPortalApi`: register/login/claim/me/reservas/assinatura/termos do dono). Payloads limpos (campos vazios removidos); livro converte `BookFormValues` → `{ authorIds, authorNames, categoryIds, categoryNames }`.
 - `auth/auth-provider.tsx` — sessão staff; `readers/reader-session.tsx` — sessão do portal (`ReaderSessionProvider`, `login/register/claim/logout/refresh`).
 - `loans/components/` — `signature-pad.tsx` (captura via `signature_pad`) + `signature-field.tsx` (escolha salva × redesenhar).
 - `hooks/use-async-data.ts` — hook genérico para carregamento de dados com loading/error/refetch.
@@ -101,9 +103,9 @@ Código real organizado por domínio: `api.ts` (clientes HTTP) + `pages/` (pági
 
 ### `pages/`
 - `public/` (home, catálogo, detalhe do livro, arquitetura, `register.tsx` do autocadastro), `auth/` (login Equipe/Leitor + claim), `not-found` — públicas e login/404.
-- `reader/account.tsx` — portal (`ReaderAccountPage`, tabs empréstimos/reservas/dados).
+- `reader/account.tsx` — portal (`ReaderAccountPage`, tabs empréstimos/reservas/dados/assinatura — a aba assinatura usa o mesmo `AppearanceEditor` do perfil da equipe).
 - `admin/*` — shims que reexportam `features/<dominio>/pages/` (o router importa daqui e não mudou).
-- Páginas em destaque: `readers/pages/reader-form-dialog.tsx` (dialog compartilhado de criação/edição de leitores), `readers/pages/reader-details.tsx` (tabs histórico/reservas com paginação 10/pág, botões de PDF via blob autenticado, botão Senha de acesso), `loans/pages/new-loan.tsx` (3 passos + preview do termo + assinatura obrigatória), `loans/pages/returns.tsx` (lista agrupada por leitor), `loans/pages/return-detail.tsx` (seleção unitária/todos, lote com condição/observações/assinatura e termo agrupado), `readers/pages/blocklist.tsx` (busca e desbloqueio em lote).
+- Páginas em destaque: `readers/pages/reader-form-dialog.tsx` (dialog compartilhado de criação/edição de leitores), `readers/pages/reader-details.tsx` (tabs histórico/reservas com paginação 10/pág, botões de PDF via blob autenticado, botão Senha de acesso, aba assinatura com `AppearanceEditor` + prévia/rubrica), `loans/pages/new-loan.tsx` (3 passos + preview do termo + assinatura obrigatória), `loans/pages/returns.tsx` (lista agrupada por leitor), `loans/pages/return-detail.tsx` (seleção unitária/todos, lote com condição/observações/assinatura e termo agrupado), `readers/pages/blocklist.tsx` (busca e desbloqueio em lote).
 
 ### `types/api.ts`
 Reexporta `@library/shared`. Os tipos canônicos (`Book`, `Loan`, `Reader`, `ReaderDetail`, `BlockedReader`, `Reservation`, `User`, `Category`, `Author`, `AuditLog`, `ReportResult`, `LibrarySettings`, `DashboardData`, `Backup`, `Paginated<T>` etc.) vivem em `packages/shared/src/` junto dos schemas Zod.

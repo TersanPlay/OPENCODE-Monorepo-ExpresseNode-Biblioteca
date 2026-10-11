@@ -30,16 +30,20 @@ Erros: sempre `{ "error": "<mensagem>" }` (ver docs/arquitetura.md → Tratament
 
 `POST /login` — corpo: `{ email, password }`. Erros: `401` credenciais inválidas ou usuário inativo; `429` muitas tentativas. Tokens staff carregam `typ: 'staff'`; `requireAuth` rejeita outro `typ` com `401` (barreira contra reuso cruzado com tokens do portal).
 
-## Users — `ADMIN` apenas
+## Users
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/api/users` | Lista paginada; filtros: `search` (nome/e-mail), `role` (ADMIN/ATTENDANT), `status` (ACTIVE/INACTIVE) |
-| POST | `/api/users` | Cria usuário: `{ name, email, password (mín. 6), role? }`. `409` e-mail duplicado |
-| GET | `/api/users/:id` | Detalhe `{ id, name, email, role, status, createdAt, updatedAt }` (sem senha) |
-| PUT | `/api/users/:id` | Atualiza `{ name?, email?, role?, status? }`; `409` e-mail duplicado; `403` ao alterar papel de outro ADMIN |
-| POST | `/api/users/:id/password` | Redefine senha: `{ password (mín. 6), currentPassword? }` — exigido `currentPassword` (validado, `403` se errado) ao redefinir senha de outro ADMIN |
-| PATCH | `/api/users/:id/signature` | Salva/substitui/remove assinatura da equipe: `{ signature }` (data-URL PNG, ou `null` p/ remover); atualiza `signatureUpdatedAt`; auditoria `USER_UPDATED` |
+`/api/users` exige **ADMIN**; as rotas `/me` são self-service (qualquer papel logado).
+
+| Método | Rota | Auth | Descrição |
+|---|---|---|---|
+| GET | `/api/users/me` | ✅ | Perfil do usuário logado (dados + assinatura e metadados de aparência) |
+| PATCH | `/api/users/me/signature` | ✅ | Define/remove a própria assinatura: `{ signature (PNG data-URL ou null), signatureType?, signatureText?, rubricText?, rubricImage?, fontFamily? }` — `signatureType`: `TEXT` \| `DRAW` \| `IMAGE`. Remover (`signature: null`) limpa os metadados |
+| GET | `/api/users` | ADMIN | Lista paginada; filtros: `search` (nome/e-mail), `role` (ADMIN/ATTENDANT), `status` (ACTIVE/INACTIVE) |
+| POST | `/api/users` | ADMIN | Cria usuário: `{ name, email, password (mín. 6), role? }`. `409` e-mail duplicado |
+| GET | `/api/users/:id` | ADMIN | Detalhe `{ id, name, email, role, status, createdAt, updatedAt, signature, signatureType, signatureText, rubricText, rubricImage, fontFamily }` (sem senha) |
+| PUT | `/api/users/:id` | ADMIN | Atualiza `{ name?, email?, role?, status? }`; `409` e-mail duplicado; `403` ao alterar papel de outro ADMIN |
+| POST | `/api/users/:id/password` | ADMIN | Redefine senha: `{ password (mín. 6), currentPassword? }` — exigido `currentPassword` (validado, `403` se errado) ao redefinir senha de outro ADMIN |
+| PATCH | `/api/users/:id/signature` | ADMIN | Salva/substitui/remove assinatura da equipe: `{ signature }` (data-URL PNG, ou `null` p/ remover) + mesmos metadados de aparência do `/me/signature`; atualiza `signatureUpdatedAt`; auditoria `USER_UPDATED` |
 
 ## Books
 
@@ -121,7 +125,7 @@ Query de `GET /books`: `search` (título, subtítulo, ISBN, editora, autor), `ca
 | GET | `/api/readers/:id` | ✅ | `{ reader, loans, activeLoans, overdueCount, reservations }` — empréstimos (últimos 50, com livro), `activeLoans` é array (não contagem), reservas (últimas 20, com livro). Dispara `refreshOverdue` |
 | PUT | `/api/readers/:id` | ✅ | Atualiza campos parciais; `409` se excluído ou CPF/e-mail em conflito |
 | PATCH | `/api/readers/:id/status` | ✅ | `{ status: 'ACTIVE' \| 'INACTIVE' \| 'BLOCKED', reason? (máx. 500), category?: 'ATRASO_REPETIDO' \| 'COMPORTAMENTO' \| 'SOLICITACAO' \| 'OUTRO' }`. `BLOCKED` grava motivo/categoria/data/autor; `ACTIVE` limpa tudo; `INACTIVE` preserva bloqueio. `409` se excluído |
-| PATCH | `/api/readers/:id/signature` | ✅ | Salva/atualiza assinatura: `{ signature }` (data-URL PNG, mín. 1, máx. 700000 chars); atualiza `signatureUpdatedAt`; `409` se excluído |
+| PATCH | `/api/readers/:id/signature` | ✅ | Define/substitui/remove a assinatura do leitor (aba assinatura de `/admin/leitores/:id`): `{ signature }` (PNG data-URL, ou `null` p/ remover) + mesmos metadados de aparência do `/users/me/signature` (`signatureType?`, `signatureText?`, `rubricText?`, `rubricImage?`, `fontFamily?`); `null` limpa os metadados e `signatureUpdatedAt`; atualiza `signatureUpdatedAt` ao salvar; auditoria `READER_UPDATED`; `409` se excluído |
 | POST | `/api/readers/:id/password` | ✅ | Balcão (qualquer staff) define/redefine senha do portal: `{ password }` (mín. 6). Retorna `{ ok: true }`; `409` se excluído |
 | DELETE | `/api/readers/:id` | ADMIN | Anonimização LGPD (`{ reason? }`, máx. 500): **recusa** com `409` se houver empréstimos ativos; cancela reservas `PENDING`/`AVAILABLE`; nome → `Leitor excluído`, CPF → `EXCLUIDO-000123`, demais dados (incl. senha e assinatura) → `null`, status `INACTIVE`. Retorna `{ ok: true, deleted: true }`; `409` se já excluído |
 
@@ -139,6 +143,8 @@ Autenticação própria da tabela `Reader` (secret JWT distinto do staff + `typ:
 | GET | `/api/readers/me` | Leitor | Perfil próprio (sem `passwordHash`) |
 | PUT | `/api/readers/me` | Leitor | Atualiza nome, contato e endereço (sem CPF/status); `409` e-mail em conflito |
 | POST | `/api/readers/me/password` | Leitor | `{ currentPassword, password }`; `401` senha atual incorreta; `404` se a conta nunca teve senha |
+| PATCH | `/api/readers/me/signature` | Leitor | Define/substitui a própria assinatura: `{ signature }` (PNG data-URL) + mesmos metadados de aparência do `/users/me/signature` (`signatureType?`, `signatureText?`, `rubricText?`, `rubricImage?`, `fontFamily?`; ausentes ⇒ `null`); atualiza `signatureUpdatedAt` |
+| DELETE | `/api/readers/me/signature` | Leitor | Remove a própria assinatura **e** limpa os metadados de aparência; termos já assinados permanecem inalterados |
 | GET | `/api/readers/me/loans` | Leitor | `{ loans, activeLoans, overdueCount }` (`activeLoans` é array; últimos 100, com livro; dispara `refreshOverdue`) |
 | GET | `/api/readers/me/reservations` | Leitor | `{ reservations }` (últimas 50, com livro; dispara `expireReservations()`) |
 | POST | `/api/readers/me/reservations` | Leitor | `{ bookId }` — livro existente e não arquivado, sem reserva ativa duplicada; `expiresAt` = +3 dias. (Balcão não checa `isArchived` — assimetria conhecida) |

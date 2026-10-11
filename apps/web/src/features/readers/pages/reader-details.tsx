@@ -1,18 +1,23 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Ban, CheckCircle2, FileText, KeyRound, Mail, MapPin, Pencil, Phone, UserCheck, UserRound, UserX } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Ban, CheckCircle2, FileText, KeyRound, Mail, MapPin, Pencil, PenLine, Phone, UserCheck, UserRound, UserX } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Select } from '../../../components/ui/select';
-import { Card, CardContent } from '../../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { ConfirmDialog } from '../../../components/ui/confirm-dialog';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { Label } from '../../../components/ui/form-field';
 import { Pagination } from '../../../components/ui/pagination';
 import { PageSkeleton } from '../../../components/ui/skeleton';
 import { ReservationStatusBadge, LoanStatusBadge, ReaderStatusBadge } from '../../../components/ui/status-badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { TD, TH, THead, TR, Table, TBody } from '../../../components/ui/table';
 import { loansApi, readersApi } from '../../api';
+import {
+  AppearanceEditor,
+  type AppearanceEditorHandle,
+} from '../../signature/appearance-editor';
 import { useAsyncData } from '../../hooks/use-async-data';
 import { useApiToast } from '../../toast/toast-provider';
 import { apiErrorMessage } from '../../../lib/errors';
@@ -51,6 +56,8 @@ export function ReaderDetailsPage() {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
   const [loansPage, setLoansPage] = useState(1);
   const [resPage, setResPage] = useState(1);
+  const sigEditorRef = useRef<AppearanceEditorHandle>(null);
+  const [sigBusy, setSigBusy] = useState(false);
 
   useEffect(() => {
     setLoansPage(1);
@@ -59,9 +66,9 @@ export function ReaderDetailsPage() {
   const { toast } = useApiToast();
   const navigate = useNavigate();
 
-  if (loading) return <PageSkeleton />;
+  if (loading && !data) return <PageSkeleton />;
 
-  if (error || !data) {
+  if (!data) {
     return (
       <Card variant="soft" className="py-14 text-center">
         <p className="text-sm font-semibold text-destructive">{error ?? 'Leitor não encontrado.'}</p>
@@ -81,6 +88,34 @@ export function ReaderDetailsPage() {
   const resPageSafe = Math.min(resPage, resTotalPages);
   const loansShown = data.loans.slice((loansPageSafe - 1) * PAGE_SIZE, loansPageSafe * PAGE_SIZE);
   const resShown = data.reservations.slice((resPageSafe - 1) * PAGE_SIZE, resPageSafe * PAGE_SIZE);
+
+  const saveSignature = async () => {
+    const value = await sigEditorRef.current?.resolve();
+    if (!value) return;
+    setSigBusy(true);
+    try {
+      await readersApi.setSignature(readerId, value);
+      toast.success('Assinatura salva');
+      refetch();
+    } catch (err) {
+      toast.error('Não foi possível salvar', apiErrorMessage(err));
+    } finally {
+      setSigBusy(false);
+    }
+  };
+
+  const removeSignature = async () => {
+    setSigBusy(true);
+    try {
+      await readersApi.setSignature(readerId, { signature: null });
+      toast.success('Assinatura removida');
+      refetch();
+    } catch (err) {
+      toast.error('Não foi possível remover', apiErrorMessage(err));
+    } finally {
+      setSigBusy(false);
+    }
+  };
 
   const toggleBlock = async () => {
     setBusy(true);
@@ -337,23 +372,75 @@ export function ReaderDetailsPage() {
                 </>
               )}
             </TabsContent>
-            <TabsContent value="signature">
-              {data.reader.signature ? (
+            <TabsContent value="signature" className="space-y-4">
+              {reader.signature ? (
                 <div className="max-w-md">
+                  <Label>Assinatura atual</Label>
                   <img
-                    src={data.reader.signature}
-                    alt={`Assinatura de ${data.reader.name}`}
-                    className="h-28 w-full rounded-small border border-black/10 bg-white object-contain"
+                    src={reader.signature}
+                    alt={`Assinatura de ${reader.name}`}
+                    className="mt-1 aspect-[13/4] w-full rounded-small border border-black/10 bg-white object-contain"
                   />
-                  {data.reader.signatureUpdatedAt && (
+                  {reader.rubricImage && (
+                    <img
+                      src={reader.rubricImage}
+                      alt={`Rubrica de ${reader.name}`}
+                      className="mt-2 h-14 w-32 rounded-small border border-black/10 bg-white object-contain"
+                    />
+                  )}
+                  {reader.signatureUpdatedAt && (
                     <p className="mt-2 text-[12px] text-muted">
-                      Registrada em {formatDate(data.reader.signatureUpdatedAt)}
+                      Registrada em {formatDate(reader.signatureUpdatedAt)}
                     </p>
                   )}
                 </div>
               ) : (
-                <EmptyState compact title="Nenhuma assinatura registrada" description="Este leitor ainda não possui assinatura no cadastro." />
+                <p className="rounded-card bg-surfaceBlue2 px-4 py-3 text-[12.5px] text-primary-dark">
+                  Nenhuma assinatura registrada. Crie abaixo para cadastrar.
+                </p>
               )}
+
+              <Card variant="plain">
+                <CardHeader>
+                  <div>
+                    <CardTitle>Aparência da assinatura</CardTitle>
+                    <CardDescription>
+                      A aparência da assinatura define como ela aparecerá nos campos de assinatura
+                      quando este leitor assinar um documento.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {reader.signature && (
+                      <Button type="button" variant="ghost" loading={sigBusy} onClick={() => void removeSignature()}>
+                        Excluir
+                      </Button>
+                    )}
+                    <Button type="button" variant="secondary" onClick={() => sigEditorRef.current?.reset()}>
+                      Cancelar
+                    </Button>
+                    <Button type="button" loading={sigBusy} onClick={() => void saveSignature()}>
+                      <PenLine className="size-4" /> Salvar
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <AppearanceEditor
+                    ref={sigEditorRef}
+                    initial={
+                      reader.signature
+                        ? {
+                            signature: reader.signature,
+                            signatureType: reader.signatureType,
+                            signatureText: reader.signatureText,
+                            rubricText: reader.rubricText,
+                            rubricImage: reader.rubricImage,
+                            fontFamily: reader.fontFamily,
+                          }
+                        : null
+                    }
+                  />
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </CardContent>

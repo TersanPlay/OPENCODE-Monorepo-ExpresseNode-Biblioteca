@@ -8,6 +8,8 @@ import { BookDetailsPage } from '../../pages/public/book-details';
 import { ArchitecturePage } from '../../pages/public/architecture';
 import { RegisterPage } from '../../pages/public/register';
 import { LoginPage } from '../../pages/auth/login';
+import { ForgotPasswordPage } from '../../pages/auth/forgot-password';
+import { ResetPasswordPage } from '../../pages/auth/reset-password';
 import { ReaderAccountPage } from '../../pages/reader/account';
 import { DashboardPage } from '../../pages/admin/dashboard';
 import { BooksPage } from '../../pages/admin/books';
@@ -24,6 +26,8 @@ import { ReservationsPage } from '../../pages/admin/reservations';
 import { ReportsPage } from '../../pages/admin/reports';
 import { LabelsPage } from '../../pages/admin/labels';
 import { UsersPage } from '../../pages/admin/users';
+import { UserDetailsPage } from '../../pages/admin/user-details';
+import { ProfilePage } from '../../pages/admin/profile';
 import { SettingsPage } from '../../pages/admin/settings';
 import { AuditPage } from '../../pages/admin/audit';
 import { BackupsPage } from '../../pages/admin/backups';
@@ -41,6 +45,8 @@ export function AppRoutes() {
       </Route>
       <Route path="cadastro" element={<RegisterPage />} />
       <Route path="login" element={<LoginPage />} />
+      <Route path="esqueci-senha" element={<ForgotPasswordPage />} />
+      <Route path="redefinir-senha" element={<ResetPasswordPage />} />
       <Route element={<RequireReader />}>
         <Route element={<PublicLayout />}>
           <Route path="minha-conta" element={<ReaderAccountPage />} />
@@ -61,11 +67,13 @@ export function AppRoutes() {
           <Route path="admin/leitores" element={<ReadersPage />} />
           <Route path="admin/leitores/:id" element={<ReaderDetailsPage />} />
           <Route path="admin/blocklist" element={<BlockListPage />} />
+          <Route path="admin/perfil" element={<ProfilePage />} />
           <Route element={<RequireAdmin />}>
             <Route path="admin/autores" element={<AuthorsPage />} />
             <Route path="admin/categorias" element={<CategoriesPage />} />
             <Route path="admin/relatorios" element={<ReportsPage />} />
             <Route path="admin/usuarios" element={<UsersPage />} />
+            <Route path="admin/usuarios/:id" element={<UserDetailsPage />} />
             <Route path="admin/configuracoes" element={<SettingsPage />} />
             <Route path="admin/auditoria" element={<AuditPage />} />
             <Route path="admin/backup" element={<BackupsPage />} />
