@@ -1,0 +1,8 @@
+# Worker estático: serve o build do frontend (apps/web/dist).
+# O deploy roda com Root directory = apps/web, então os caminhos são relativos a ele.
+name = "biblioteca-publica-opencode-monorepo"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
