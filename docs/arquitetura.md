@@ -77,7 +77,7 @@ apps/api/
     server.ts            Bootstrap HTTP (usa `config/env.ts`)
     app.ts               Montagem dos routers, CORS, handlers de erro
     validation.ts        `parse()` + reexporta `@library/shared`
-    config/env.ts        Env centralizado (`JWT_SECRET`, `READER_JWT_SECRET`, `JWT_EXPIRES`, `CORS_ORIGIN`, `PORT`, `NODE_ENV`) + `jwtSecret()`; sem `JWT_SECRET` o servidor aborta (fatal)
+    config/env.ts        Env centralizado (`JWT_SECRET`, `READER_JWT_SECRET`, `JWT_EXPIRES`, `CORS_ORIGIN`, `PORT`, `NODE_ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`/`ZOHO_EMAIL`, `SMTP_PASS`/`ZOHO_APP_PASSWORD`, `MAIL_FROM`, `FRONTEND_URL`) + `jwtSecret()`; sem `JWT_SECRET` o servidor aborta (fatal)
     infrastructure/      Reexports centrais: database (prisma), http
                          (http-error, async-handler, error-handler), pdf
                          (terms), covers, audit, loans (overdue), settings
@@ -208,6 +208,12 @@ ADMIN_PASSWORD=sua-senha
 CORS_ORIGIN=http://localhost:5173   # opcional, lista separada por vírgula
 PORT=3333                 # opcional
 NODE_ENV=development      # opcional
+SMTP_HOST=smtp.zoho.com   # opcional (padrão Zoho; contas pessoais @zohomail.com)
+SMTP_PORT=465             # opcional (465 = SSL; 587 = STARTTLS)
+ZOHO_EMAIL=voce@zohomail.com       # conta remetente (obrigatória p/ enviar e-mail)
+ZOHO_APP_PASSWORD=<senha de aplicativo>  # obrigatória p/ enviar; com 2FA, gerar em mail.zoho.com
+MAIL_FROM=                # opcional; padrão = ZOHO_EMAIL (o Zoho exige remetente = conta)
+FRONTEND_URL=http://localhost:5173  # opcional; base do link de redefinição (produção: URL pública)
 ```
 
 > Use `file:./dev.db` (relativo, padrão do `.env.example`) ou caminho absoluto `file:C:/...` se o banco ficar fora do pacote. Sem `JWT_SECRET`, o servidor aborta com `[fatal]`.
@@ -219,6 +225,12 @@ NODE_ENV=development      # opcional
 ```
 VITE_API_URL=http://localhost:3333/api   # opcional; padrão '/api' (proxy)
 ```
+
+## E-mail / recuperação de senha
+
+- Envio via Nodemailer pelo SMTP do Zoho (`lib/mail.ts`: `sendEmail`, `passwordResetEmail`). Contas pessoais `@zohomail.com` usam `smtp.zoho.com` sem configurar DNS de domínio próprio.
+- Sem `ZOHO_EMAIL`/`ZOHO_APP_PASSWORD` (ou `MAIL_FROM`), o envio falha com erro `[email]` explícito — nunca silencioso.
+- Fluxo: `POST /auth|/readers/forgot-password` cria token aleatório (guardado como hash SHA-256 em `PasswordResetToken`, `lib/password-reset.ts`), validade 1 hora (`RESET_TOKEN_TTL_MS`), uso único; o link é `FRONTEND_URL/redefinir-senha?token=..&tipo=equipe|leitor`. Resposta sempre genérica (anti-enumeração de e-mails).
 
 ## Notas
 

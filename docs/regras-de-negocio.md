@@ -161,11 +161,19 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 - Leitores antigos (cadastrados no balcão, sem senha): o balcão define a senha em Detalhe do leitor → Senha de acesso, ou o próprio leitor ativa em `/login` → Primeiro acesso (confere CPF com/sem máscara + e-mail sem caixa; exige `ACTIVE`, não excluído e conta ainda sem senha; `401` genérico; rate-limit).
 - Exclusão LGPD também apaga `passwordHash` e assinatura do leitor.
 
+## Recuperação de senha (e-mail)
+
+- Telas `/esqueci-senha` (abas Equipe/Leitor) e `/redefinir-senha` (`?token=..&tipo=equipe|leitor`).
+- `POST /auth|/readers/forgot-password`: resposta sempre genérica (não revela se o e-mail existe). Equipe: envia se o usuário existir e estiver `ACTIVE`. Leitor: envia se existir, estiver `ACTIVE`, não excluído e **já tiver senha** (sem senha, usa o Primeiro acesso).
+- Token aleatório guardado como hash SHA-256 (`PasswordResetToken`), validade 1 hora, uso único. `POST /auth|/readers/reset-password` com token inválido/expirado retorna `400`.
+- Rate-limit 10/15 min nos 4 endpoints. Auditoria: `PASSWORD_RESET_REQUESTED`/`PASSWORD_RESET_DONE` (equipe), `READER_PASSWORD_RESET_REQUESTED`/`READER_PASSWORD_RESET_DONE` (leitor).
+- Envio via SMTP do Zoho (`ZOHO_EMAIL`/`ZOHO_APP_PASSWORD`); o link usa `FRONTEND_URL` — em produção deve ser a URL pública.
+
 ## Auditoria
 
 Toda operação de escrita registra quem (usuário autenticado; `null` em fluxos self/automáticos), o quê (ação), sobre qual entidade, com metadados e IP. Falhas de login também são registradas (sem usuário). Rotas de backup (`GET/POST/DELETE /backups`) não geram auditoria.
 
-Ações registradas: `LOGIN`, `LOGOUT`, `LOGIN_FAILED`, `USER_CREATED`, `USER_UPDATED`, `USER_PASSWORD_RESET`, `BOOK_CREATED`, `BOOK_UPDATED`, `BOOK_ARCHIVED`, `BOOK_RESTORED`, `AUTHOR_CREATED`, `AUTHOR_UPDATED`, `AUTHOR_ACTIVATED`, `AUTHOR_INACTIVATED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_STATUS_CHANGED`, `READER_CREATED`, `READER_UPDATED`, `READER_STATUS_CHANGED`, `READER_DELETED`, `LOAN_CREATED`, `LOAN_RETURNED`, `LOAN_RENEWED`, `RESERVATION_CREATED`, `RESERVATION_CANCELLED`, `RESERVATION_FULFILLED`, `SETTINGS_UPDATED`.
+Ações registradas: `LOGIN`, `LOGOUT`, `LOGIN_FAILED`, `USER_CREATED`, `USER_UPDATED`, `USER_PASSWORD_RESET`, `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_DONE`, `READER_PASSWORD_RESET_REQUESTED`, `READER_PASSWORD_RESET_DONE`, `BOOK_CREATED`, `BOOK_UPDATED`, `BOOK_ARCHIVED`, `BOOK_RESTORED`, `AUTHOR_CREATED`, `AUTHOR_UPDATED`, `AUTHOR_ACTIVATED`, `AUTHOR_INACTIVATED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_STATUS_CHANGED`, `READER_CREATED`, `READER_UPDATED`, `READER_STATUS_CHANGED`, `READER_DELETED`, `LOAN_CREATED`, `LOAN_RETURNED`, `LOAN_RENEWED`, `RESERVATION_CREATED`, `RESERVATION_CANCELLED`, `RESERVATION_FULFILLED`, `SETTINGS_UPDATED`.
 
 ## Backup
 

@@ -4,13 +4,13 @@
 
 | Módulo | Arquivo | Prefixo | Auth no módulo |
 |---|---|---|---|
-| Auth | `auth/auth.routes.ts` | `/api/auth` | login público; me/logout exigem auth |
+| Auth | `auth/auth.routes.ts` | `/api/auth` | login e `forgot|reset-password` públicos (rate-limit); me/logout exigem auth |
 | Users | `user/user.routes.ts` | `/api/users` | `/me` e `/me/signature` self-service (qualquer papel); resto ADMIN |
 | Books | `book/book.routes.ts` | `/api/books` | leitura pública (incl. `GET /cover`, público com rate-limit); escrita com auth; `GET /exists` com auth |
 | Authors | `author/author.routes.ts` | `/api/authors` | auth (qualquer staff, incl. escrita) |
 | Categories | `category/category.routes.ts` | `/api/categories` | leitura pública; `?all=1` exige auth; escrita ADMIN |
 | Readers | `reader/reader.routes.ts` | `/api/readers` | auth (DELETE: ADMIN); `POST /:id/password` qualquer staff |
-| Reader Auth | `reader/reader-auth.routes.ts` | `/api/readers` | `/register`, `/login` e `/claim` públicos (rate-limit); `/me/*` com sessão de leitor |
+| Reader Auth | `reader/reader-auth.routes.ts` | `/api/readers` | `/register`, `/login`, `/claim` e `forgot|reset-password` públicos (rate-limit); `/me/*` com sessão de leitor |
 | Loans | `loan/loan.routes.ts` | `/api/loans` | auth; `POST /returns/batch` e `GET /returns/pending` agrupados; termos (`GET /:id/term`, `/:id/return-term`, `/return-term/batch/:group`) aceitam staff ou dono |
 | Reservations | `reservation/reservation.routes.ts` | `/api/reservations` | auth |
 | Reports | `report/report.routes.ts` | `/api/reports` | ADMIN |
@@ -24,7 +24,9 @@
 - `loan/loan.routes.ts` — `assertBookEligible` (validação de livro para empréstimo, reutilizada no empréstimo individual e no lote), `ensureNumber` (gera `EMP-000123`), `buildLoanSnapshots` (snapshots de dados do leitor/livro/usuário no momento do empréstimo), `resolveLoanSignature` (desenho atualiza a salva; `useSavedSignature` reaproveita), `requireStaffOrLoanOwner` (termos: staff ou dono, `403` terceiros), `performReturn` + `applyAutoBlock` (núcleo da devolução unitária e em lote).
 - `book/book.routes.ts` — `resolveAuthorNames`, `resolveCategoryNames` (find-or-create dentro da transação), `findDuplicateBook`/`duplicateConflict` (ISBN duplicado).
 - `reader/reader.routes.ts` — `DELETE /:id` com anonimização LGPD (substitui dados pessoais incl. senha/assinatura, cancela reservas, **recusa** `409` se houver empréstimos ativos); `POST /:id/password` (balcão define senha do portal).
-- `reader/reader-auth.routes.ts` — `POST /register|/login|/claim` públicos, `GET|PUT /me`, `POST /me/password`, `GET /me/loans|/me/reservations`, `POST /me/reservations|/me/reservations/:id/cancel`.
+- `reader/reader-auth.routes.ts` — `POST /register|/login|/claim|/forgot-password|/reset-password` públicos, `GET|PUT /me`, `POST /me/password`, `GET /me/loans|/me/reservations`, `POST /me/reservations|/me/reservations/:id/cancel`.
+- `lib/mail.ts` — `sendEmail` (Nodemailer via SMTP do Zoho), `passwordResetEmail` (texto + HTML com link de 1 hora).
+- `lib/password-reset.ts` — `createResetToken` / `consumeResetToken` (hash SHA-256, `RESET_TOKEN_TTL_MS` = 1h, uso único, limpeza best-effort de expirados).
 - `lib/overdue.ts` — `refreshOverdue`, `expireReservations`, `computeDueDate`, `addDays`.
 - `lib/settings.ts` — `getSettings()` (regras + dados institucionais; defaults estruturais sem dados de demonstração).
 - `lib/terms.ts` — `generateLoanTermPDF`, `generateReturnTermPDF` (imagem da assinatura ou linhas manuais), `generateBatchReturnTermPDF` (termo agrupado multi-livros).
@@ -76,7 +78,9 @@
 
 | Rota | Página |
 |---|---|
-| `/login` | Login com abas Equipe/Leitor + primeiro acesso (claim) |
+| `/login` | Login com abas Equipe/Leitor + primeiro acesso (claim) e link "Esqueci minha senha" |
+| `/esqueci-senha` | Recuperação de senha (abas Equipe/Leitor; resposta genérica + nota de spam) |
+| `/redefinir-senha` | Nova senha via `?token=..&tipo=equipe|leitor` (token 1h, uso único) |
 | `*` | 404 |
 
 ### Guardas (`apps/web/src/app/router/guards.tsx`)

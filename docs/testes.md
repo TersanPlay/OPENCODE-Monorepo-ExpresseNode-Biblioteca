@@ -30,7 +30,7 @@ Cobre **62 casos**, incluindo:
 - Relatórios (todos os tipos) e exportação CSV
 - Configurações e auditoria
 
-Limpeza via `deleteMany` direto no `finally` (não exercita o `DELETE /readers/:id` LGPD — ver abaixo). Não cobre: expiração real de token, upload de backup, PDFs e `429` além do login.
+Limpeza via `deleteMany` direto no `finally` (não exercita o `DELETE /readers/:id` LGPD — ver abaixo). Não cobre: expiração real de token, upload de backup, PDFs, `429` além do login e os endpoints de recuperação de senha (exigem SMTP real).
 
 > Não cobertos pelo smoke (validar manualmente quando mexer nessas áreas):
 > rate limit de login (429), token expirado, exportação CSV (`GET /reports/export`),

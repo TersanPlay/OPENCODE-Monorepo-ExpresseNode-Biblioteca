@@ -27,8 +27,12 @@ Erros: sempre `{ "error": "<mensagem>" }` (ver docs/arquitetura.md → Tratament
 | POST | `/api/auth/login` | — | Login. Rate limit: 10/15 min. Retorna `{ token, user }` |
 | GET | `/api/auth/me` | ✅ | Usuário autenticado (`{ user }`) |
 | POST | `/api/auth/logout` | ✅ | Registra auditoria de logout; `{ ok: true }` |
+| POST | `/api/auth/forgot-password` | — | Recuperação de senha: `{ email }`. Resposta sempre genérica `{ ok: true, message }` (anti-enumeração). Rate limit: 10/15 min |
+| POST | `/api/auth/reset-password` | — | Redefine com token: `{ token, password (mín. 6) }`. `400` link inválido ou expirado |
 
 `POST /login` — corpo: `{ email, password }`. Erros: `401` credenciais inválidas ou usuário inativo; `429` muitas tentativas. Tokens staff carregam `typ: 'staff'`; `requireAuth` rejeita outro `typ` com `401` (barreira contra reuso cruzado com tokens do portal).
+
+Recuperação de senha (equipe): o `forgot` só envia e-mail se o usuário existir e estiver `ACTIVE`; o token (hash SHA-256 no banco, tabela `PasswordResetToken`) vale 1 hora e é de uso único. Auditoria `PASSWORD_RESET_REQUESTED` / `PASSWORD_RESET_DONE`. Envio via Zoho Mail SMTP (ver docs/arquitetura.md).
 
 ## Users
 
@@ -140,6 +144,8 @@ Autenticação própria da tabela `Reader` (secret JWT distinto do staff + `typ:
 | POST | `/api/readers/register` | — | Autocadastro: `readerSchema` + `email` (obrigatório, único) + `password` (mín. 6). Cria `ACTIVE` e já retorna `{ token, reader }`. `409` CPF/e-mail duplicado |
 | POST | `/api/readers/login` | — | `{ email, password }` → `{ token, reader }`. `401` genérico (incl. excluído, inativo ou sem senha) |
 | POST | `/api/readers/claim` | — | Primeiro acesso: `{ cpf, email, password }`. CPF aceito com ou sem máscara; e-mail comparado sem caixa; exige `ACTIVE`, não excluído, e-mail igual e conta ainda sem senha. `401` genérico caso contrário |
+| POST | `/api/readers/forgot-password` | — | Recuperação de senha: `{ email }`. Resposta sempre genérica (anti-enumeração). Só envia se o leitor existir, estiver `ACTIVE`, não excluído e **já tiver senha**. Rate limit: 10/15 min |
+| POST | `/api/readers/reset-password` | — | Redefine com token: `{ token, password (mín. 6) }`. `400` link inválido ou expirado. Token de 1 hora, uso único; auditoria `READER_PASSWORD_RESET_REQUESTED` / `READER_PASSWORD_RESET_DONE` |
 | GET | `/api/readers/me` | Leitor | Perfil próprio (sem `passwordHash`) |
 | PUT | `/api/readers/me` | Leitor | Atualiza nome, contato e endereço (sem CPF/status); `409` e-mail em conflito |
 | POST | `/api/readers/me/password` | Leitor | `{ currentPassword, password }`; `401` senha atual incorreta; `404` se a conta nunca teve senha |
