@@ -21,6 +21,9 @@ export const env = {
   get JWT_EXPIRES(): string {
     return process.env.JWT_EXPIRES || '8h';
   },
+  get PASSWORD_PEPPER(): string {
+    return process.env.PASSWORD_PEPPER?.trim() || `${required('JWT_SECRET')}#pepper`;
+  },
   get CORS_ORIGIN(): string[] {
     return (process.env.CORS_ORIGIN || 'http://localhost:5173')
       .split(',')

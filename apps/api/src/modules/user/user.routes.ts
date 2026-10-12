@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import prisma from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { asyncHandler } from '../../middleware/async-handler';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
+import { env } from '../../config/env';
+import { hashPassword, verifyPassword } from '../../lib/password-hash';
 import { parse, userCreateSchema, userQuerySchema, userSignatureSchema, userUpdateSchema, resetPasswordSchema } from '../../validation';
 
 export const userRouter = Router();
@@ -79,7 +80,7 @@ userRouter.post(
       data: {
         name: data.name,
         email: data.email,
-        passwordHash: await bcrypt.hash(data.password, 10),
+        passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER),
         role: data.role,
       },
     });
@@ -165,10 +166,10 @@ userRouter.post(
     if (existing.role === 'ADMIN' && req.user!.id !== id) {
       if (!data.currentPassword) throw new HttpError(400, 'Senha atual obrigatória para redefinir senha de outro administrador');
       const caller = await prisma.user.findUnique({ where: { id: req.user!.id } });
-      const valid = await bcrypt.compare(data.currentPassword, caller!.passwordHash);
-      if (!valid) throw new HttpError(403, 'Senha atual inválida');
+      const valid = await verifyPassword(data.currentPassword, caller!.passwordHash, env.PASSWORD_PEPPER);
+      if (valid !== 'valid') throw new HttpError(403, 'Senha atual inválida');
     }
-    await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(data.password, 10) } });
+    await prisma.user.update({ where: { id }, data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) } });
     await writeAudit(req.user?.id, 'USER_PASSWORD_RESET', 'User', id, undefined, req.ip);
     res.json({ ok: true });
   }),

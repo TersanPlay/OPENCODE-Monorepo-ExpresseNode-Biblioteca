@@ -15,5 +15,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["src", "scripts", "prisma/seed.ts"]
+  "include": ["src", "scripts", "prisma/seed.ts"],
+  "exclude": ["src/worker", "src/worker.ts", "worker-configuration.d.ts"]
 }

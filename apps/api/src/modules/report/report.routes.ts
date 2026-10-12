@@ -291,15 +291,14 @@ reportRouter.get(
     const name = `relatorio-${type}-${new Date().toISOString().slice(0, 10)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
-    const doc = generateReportPDF({
+    const bytes = await generateReportPDF({
       title: `Relatório — ${type}`,
       generatedAt: result.generatedAt,
       filters: result.filters,
       columns: result.columns,
       rows: result.rows,
     });
-    doc.pipe(res);
-    doc.end();
+    res.send(Buffer.from(bytes));
   }),
 );
 

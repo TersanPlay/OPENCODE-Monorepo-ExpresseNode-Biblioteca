@@ -1,7 +1,13 @@
 import { PrismaClient } from '../src/generated/prisma';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../src/lib/password-hash';
 
 const prisma = new PrismaClient();
+
+function pepper(): string {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error('[seed] JWT_SECRET ausente — defina no arquivo .env');
+  return process.env.PASSWORD_PEPPER?.trim() || `${jwtSecret}#pepper`;
+}
 
 async function main() {
   await prisma.setting.upsert({
@@ -31,7 +37,7 @@ async function main() {
         data: {
           name: adminName,
           email: adminEmail,
-          passwordHash: await bcrypt.hash(adminPassword, 10),
+          passwordHash: await hashPassword(adminPassword, pepper()),
           role: 'ADMIN',
         },
       });

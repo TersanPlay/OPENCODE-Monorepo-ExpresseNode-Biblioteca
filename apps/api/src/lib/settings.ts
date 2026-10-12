@@ -1,4 +1,5 @@
 import prisma from './prisma';
+import type { PrismaClient } from '../generated/prisma';
 
 export interface LibrarySettings {
   loanLimit: number;
@@ -11,8 +12,8 @@ export interface LibrarySettings {
   libraryHours: string | null;
 }
 
-export async function getSettings(): Promise<LibrarySettings> {
-  const s = await prisma.setting.findUnique({ where: { id: 1 } });
+export async function getSettings(client: PrismaClient = prisma): Promise<LibrarySettings> {
+  const s = await client.setting.findUnique({ where: { id: 1 } });
   if (s) {
     return {
       loanLimit: s.loanLimit,

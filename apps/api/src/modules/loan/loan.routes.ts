@@ -587,9 +587,8 @@ loanRouter.get(
     const settings = await getSettings();
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="termo-emprestimo-${loan.number || `EMP-${String(loan.id).padStart(6, '0')}`}.pdf"`);
-    const doc = generateLoanTermPDF(loan as any, settings);
-    doc.pipe(res);
-    doc.end();
+    const bytes = await generateLoanTermPDF(loan as any, settings);
+    res.send(Buffer.from(bytes));
   }),
 );
 
@@ -629,9 +628,8 @@ loanRouter.get(
     const settings = await getSettings();
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="termo-devolucao-${req.params.group}.pdf"`);
-    const doc = generateBatchReturnTermPDF(loans as any, settings);
-    doc.pipe(res);
-    doc.end();
+    const bytes = await generateBatchReturnTermPDF(loans as any, settings);
+    res.send(Buffer.from(bytes));
   }),
 );
 
@@ -646,8 +644,7 @@ loanRouter.get(
     const settings = await getSettings();
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="termo-devolucao-DEV-${String(loan.id).padStart(6, '0')}.pdf"`);
-    const doc = generateReturnTermPDF(loan as any, settings);
-    doc.pipe(res);
-    doc.end();
+    const bytes = await generateReturnTermPDF(loan as any, settings);
+    res.send(Buffer.from(bytes));
   }),
 );

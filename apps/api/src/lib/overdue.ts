@@ -1,6 +1,7 @@
 import prisma from './prisma';
+import type { PrismaClient } from '../generated/prisma';
 
-export async function refreshOverdue(readerId?: number): Promise<void> {
+export async function refreshOverdue(readerId?: number, client: PrismaClient = prisma): Promise<void> {
   const now = new Date();
   const where = {
     returnedAt: null,
@@ -8,23 +9,23 @@ export async function refreshOverdue(readerId?: number): Promise<void> {
     status: 'ACTIVE' as const,
     ...(readerId ? { readerId } : {}),
   };
-  const loans = await prisma.loan.findMany({ where, select: { id: true } });
+  const loans = await client.loan.findMany({ where, select: { id: true } });
   if (loans.length > 0) {
-    await prisma.loan.updateMany({
+    await client.loan.updateMany({
       where: { id: { in: loans.map((l) => l.id) } },
       data: { status: 'OVERDUE' },
     });
   }
 }
 
-export async function expireReservations(): Promise<void> {
+export async function expireReservations(client: PrismaClient = prisma): Promise<void> {
   const now = new Date();
-  const rows = await prisma.reservation.findMany({
+  const rows = await client.reservation.findMany({
     where: { status: 'PENDING', expiresAt: { lt: now } },
     select: { id: true },
   });
   if (rows.length > 0) {
-    await prisma.reservation.updateMany({
+    await client.reservation.updateMany({
       where: { id: { in: rows.map((r) => r.id) } },
       data: { status: 'EXPIRED' },
     });

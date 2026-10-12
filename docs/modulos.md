@@ -116,12 +116,12 @@ Reexporta `@library/shared`. Os tipos canônicos (`Book`, `Loan`, `Reader`, `Rea
 
 ## Mapa no monorepo (apps/api, apps/web, packages)
 
-- Backend por domínio: `apps/api/src/modules/<dominio>/<dominio>.routes.ts` (mesmas rotas e regras; imports ajustados para a nova profundidade).
-- Centralização backend: `apps/api/src/config/env.ts` (env + JWT), `apps/api/src/infrastructure/` (prisma, http, pdf, covers, audit, loans, settings — reexportam `lib/`/`middleware/`).
+- Backend por domínio: `apps/api/src/modules/<dominio>/<dominio>.routes.ts` (Express; mesmas rotas e regras). Espelho Worker em `apps/api/src/worker/modules/` (Hono; portados: `auth`, `user`, `reader-auth`, `settings` — demais em portagem), montados em `apps/api/src/worker.ts` sob os mesmos prefixos `/api/*`.
+- Centralização backend: `apps/api/src/config/env.ts` (env + JWT + `PASSWORD_PEPPER`), `apps/api/src/infrastructure/` (prisma, http, pdf, covers, audit, loans, settings — reexportam `lib/`/`middleware/`), `apps/api/src/worker/` (env, context, db, http, errors, auth `jose`, rate-limit, mail stub + módulos).
 - Contratos: `packages/shared` (schemas Zod + tipos + constantes); `apps/api/src/validation.ts` expõe `parse()` e reexporta o shared; frontend usa `@library/shared` (tipos, ISBN/CPF) e `features/<dominio>/api.ts`.
 - Design System: `packages/ui` (Radix); `apps/web/src/components/ui/*` são shims de compatibilidade.
 - Páginas admin: código real em `apps/web/src/features/<dominio>/pages/`; `apps/web/src/pages/admin/*` reexportam (o router não mudou).
-- Prisma Client gerado em `apps/api/src/generated/prisma` (`output` explícito no schema; `pnpm build` copia o runtime para `dist/`).
+- Prisma Client gerado em `apps/api/src/generated/prisma` (`output` explícito no schema + `previewFeatures = ["driverAdapters"]`; `pnpm build` copia o runtime para `dist/`). D1 `biblioteca-publica` (mesmo schema) com migrations em `apps/api/prisma/migrations/`; `lib/prisma.ts` expõe `createPrisma(db?)` (D1 via adapter no Worker, SQLite local no Express).
 
 ## Scripts (`scripts/`)
 

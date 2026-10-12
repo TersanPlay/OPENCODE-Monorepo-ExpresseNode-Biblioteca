@@ -12,9 +12,11 @@ Aplicação web de duas camadas para gestão de biblioteca pública:
    http://localhost:5173                   http://localhost:3333/api
 ```
 
+Em produção, a mesma API roda como Worker na Cloudflare (`apps/api/src/worker.ts`, Hono) com banco D1 (`biblioteca-publica`) — mesmo contrato, mesmas respostas, JWTs compatíveis nos dois sentidos. Ver "Worker + D1 (produção)" abaixo.
+
 - O frontend é uma SPA (Vite dev na porta 5173) com proxy `/api` → porta 3333 em desenvolvimento.
 - O backend expõe uma API REST sob a URL base `/api` (porta 3333).
-- O banco é SQLite via Prisma (`apps/api/prisma/dev.db`), preparado para migração a PostgreSQL.
+- O banco é SQLite via Prisma (`apps/api/prisma/dev.db` no dev local; D1 `biblioteca-publica` em produção — mesmo schema). Formato de DateTime difere por runtime: o engine Node grava millis INTEGER; o adapter D1 grava ISO-8601 TEXT (único formato que o edge lê) — nunca cruzar dados crus entre os dois sem converter.
 - Autenticação stateless: JWT assinado, enviado como `Authorization: Bearer <token>`.
 
 ## Stack
@@ -23,14 +25,14 @@ Aplicação web de duas camadas para gestão de biblioteca pública:
 
 | Camada | Tecnologia |
 |---|---|
-| Runtime | Node.js + TypeScript (executado com `tsx watch`) |
-| HTTP | Express 4 |
-| ORM | Prisma 5 (`@prisma/client`) |
-| Banco | SQLite (arquivo `dev.db`), schema em `prisma/schema.prisma` |
+| Runtime | Node.js + TypeScript (executado com `tsx watch`) — dev local; Worker Cloudflare (Hono, `src/worker.ts`) — produção |
+| HTTP | Express 4 (local) / Hono 4 (Worker) — mesmo contrato e respostas |
+| ORM | Prisma 5 (`@prisma/client` + `@prisma/adapter-d1`, `previewFeatures = ["driverAdapters"]`) |
+| Banco | SQLite local (`dev.db`) / D1 `biblioteca-publica` (produção); migrations em `prisma/migrations/` |
 | Validação | Zod 3 (`src/validation.ts`: `parse()` + reexporta `@library/shared`) |
-| Autenticação | JWT (`jsonwebtoken`) + bcryptjs |
+| Autenticação | JWT HS256 (`jose` no Worker, `jsonwebtoken` no Express — tokens compatíveis) + PBKDF2-SHA256 10k + pepper (`lib/password-hash.ts`) |
 | PDF | `pdfkit` (geração de termos de empréstimo e devolução) |
-| Rate limit | `express-rate-limit` (login e consulta de capa) |
+| Rate limit | `express-rate-limit` (Express) / janela deslizante em memória (Worker) — login 10/15 min, capa 30/15 min |
 | Upload | `multer` (restauração de backup por arquivo local) |
 | Cron | `node-cron` (backups automáticos 18:30 e 23:45) |
 
@@ -49,6 +51,17 @@ Aplicação web de duas camadas para gestão de biblioteca pública:
 
 Metodologia UI Architect ASJ: canvas `#F2F2F0`, primary `#087F8C`, superfícies creme, hairline, motion refinado. Tokens em Tailwind (`apps/web/tailwind.config.ts`).
 
+## Worker + D1 (produção Cloudflare)
+
+- Entrada: `apps/api/src/worker.ts` (Hono) — monta `/api/health`, `/api/auth`, `/api/users`, `/api/readers` (portal), `/api/settings`; demais módulos (`reader` balcão, `loan`, `book`, `report`, `reservation`, `audit`, `dashboard`, `category`, `author`, `label`, `backup`) em portagem.
+- `apps/api/src/worker/`: `env.ts` (vars/secrets + defaults iguais ao Express), `context.ts` (tipos `AppEnv`), `db.ts` (Prisma por requisição via binding `DB`), `http.ts` (`reqJson`, `clientIp`), `errors.ts` (mesmo mapa de erros do Express), `auth.ts` (JWT `jose`, `publicReader`), `rate-limit.ts` (janela deslizante), `mail.ts` (stub `503` até provedor HTTP), `modules/` (portagens).
+- O código Express (`app.ts`, `modules/`) segue intacto para o dev local — libs compartilhadas aceitam client injetável (`writeAudit`, `create/consumeResetToken`, `refreshOverdue`, `expireReservations`).
+- `apps/api/wrangler.jsonc`: worker `biblioteca-api`, `compatibility_date` atual, `compatibility_flags: ["nodejs_compat"]`, binding `DB` → D1 `biblioteca-publica`, `migrations_dir: prisma/migrations` (+ `migrations_pattern` p/ layout `0001_init/migration.sql`), observability (logs + traces).
+- Banco: `prisma/migrations/0001_init/migration.sql` gerado via `prisma migrate diff --from-empty`; dados importados com datetimes em ISO-8601 (único formato legível no edge).
+- Typecheck duplo: `tsc --noEmit` (Express, exclui `src/worker`) + `tsc --noEmit -p tsconfig.worker.json` (Worker, `types: []`, inclui `worker-configuration.d.ts` gerado por `wrangler types`).
+- Dev local do Worker: `wrangler d1 migrations apply DB --local` + `wrangler dev --port 8787` (D1 local em `.wrangler/`, secrets em `.dev.vars` — ambos gitignored).
+- Deploy: segundo Worker (`biblioteca-api`, Root `apps/api`) + `VITE_API_URL` no web.
+
 ### Regra de ícones do sidebar (`AdminLayout`)
 
 O sidebar tem biblioteca própria, diferente do resto da aplicação:
@@ -65,8 +78,13 @@ apps/api/
   prisma/
     schema.prisma        Modelos do banco (`output` do client → `src/generated/prisma`)
     seed.ts              Bootstrap estrutural (config + admin via env)
+    migrations/          SQL p/ D1 (`0001_init/migration.sql` via `migrate diff --from-empty`)
+    dev.db               SQLite local (gitignored)
+  wrangler.jsonc         Worker `biblioteca-api`: binding D1 `DB`, migrations, observability
+  worker-configuration.d.ts  Tipos gerados (`wrangler types`; commitado)
+  .dev.vars              Secrets locais do `wrangler dev` (gitignored)
   scripts/
-    smoke.ts             Suite E2E via API (62 casos)
+    smoke.ts             Suite E2E via API (80 casos)
     import-books.ts      Importação de livros de planilha
     dedupe-books.ts      Utilitário de deduplicação de ISBN
     delete-reader-e2e.ts E2E de exclusão de leitor (via `tsx`, sem script npm)
@@ -77,14 +95,14 @@ apps/api/
     server.ts            Bootstrap HTTP (usa `config/env.ts`)
     app.ts               Montagem dos routers, CORS, handlers de erro
     validation.ts        `parse()` + reexporta `@library/shared`
-    config/env.ts        Env centralizado (`JWT_SECRET`, `READER_JWT_SECRET`, `JWT_EXPIRES`, `CORS_ORIGIN`, `PORT`, `NODE_ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`/`ZOHO_EMAIL`, `SMTP_PASS`/`ZOHO_APP_PASSWORD`, `MAIL_FROM`, `FRONTEND_URL`) + `jwtSecret()`; sem `JWT_SECRET` o servidor aborta (fatal)
+    config/env.ts        Env centralizado (`JWT_SECRET`, `READER_JWT_SECRET`, `JWT_EXPIRES`, `PASSWORD_PEPPER`, `CORS_ORIGIN`, `PORT`, `NODE_ENV`, `SMTP_*`, `MAIL_FROM`, `FRONTEND_URL`) + `jwtSecret()`; sem `JWT_SECRET` o servidor aborta (fatal)
     infrastructure/      Reexports centrais: database (prisma), http
                          (http-error, async-handler, error-handler), pdf
                          (terms), covers, audit, loans (overdue), settings
-    lib/                 Implementações: prisma, http-error, audit (writeAudit),
-                         settings (getSettings), overdue (refreshOverdue,
-                         expireReservations, computeDueDate), cover, terms (pdfkit),
+    lib/                 Implementações: prisma (`createPrisma(db?)`: D1 via adapter no Worker, SQLite local no Express), http-error, audit (writeAudit aceita client injetável), password-hash (PBKDF2-SHA256 + pepper via WebCrypto; verifica bcrypt legado fora do Worker), password-reset (WebCrypto + client injetável), mail-content (template puro), settings (getSettings), overdue (refreshOverdue, expireReservations, computeDueDate — com client injetável), cover, terms (pdfkit),
                          reader-auth (sessão isolada do portal)
+    worker/              Runtime Cloudflare: env, context, db (Prisma por requisição), http, errors, auth (`jose`), rate-limit, mail (stub 503), modules/ (portagens Hono)
+    worker.ts            Entrada do Worker (monta `/api/*`, `notFound`/`onError`)
     middleware/          auth (signToken c/ `typ: 'staff'`, requireAuth barra outro `typ`, requireRoles),
                          login/cover rate-limit, error-handler, async-handler
     modules/<dominio>/   Um router por domínio (reader tem 2: staff + portal; ver docs/modulos.md)
@@ -120,11 +138,17 @@ packages/config/         ESLint compartilhado (`@library/config`)
 
 ## Autenticação e sessão
 
-- `POST /api/auth/login` valida e-mail/senha (bcrypt), emite JWT staff com `sub`, `role` e `typ: 'staff'`, expiração padrão **8 horas** (`JWT_EXPIRES`).
+- `POST /api/auth/login` valida e-mail/senha (PBKDF2-SHA256 10k + pepper, ~5ms; ver Senhas abaixo), emite JWT staff com `sub`, `role` e `typ: 'staff'`, expiração padrão **8 horas** (`JWT_EXPIRES`). Hash bcrypt legado → `401` orientando redefinição (sem CPU p/ bcrypt no plano Free); login válido com parâmetros defasados faz re-hash transparente.
 - Para evitar enumeração de e-mail, compara a senha contra um hash dummy quando o usuário não existe.
 - `requireAuth` verifica o JWT, rejeita `typ` diferente de staff e **consulta o banco** a cada requisição: usuário deve existir e estar `ACTIVE`.
 - `requireRoles(...)` restringe a rota a determinados papéis.
 - Logout não revoga o token (sessão stateless); apenas registra auditoria. A revogação efetiva ocorre ao expirar ou ao usuário ser desativado (o `requireAuth` rejeita usuários `INACTIVE`).
+
+## Senhas (PBKDF2)
+
+- Algoritmo: PBKDF2-SHA256 via WebCrypto (Node 18+ e Workers), 10.000 iterações, salt aleatório 16 bytes, pepper HMAC (`PASSWORD_PEPPER`, default derivado de `JWT_SECRET`) — ~5ms, cabe no CPU do plano Free. Formato versionado `$pbkdf2$<versão>$<iterações>$<salt>$<hash>` (`apps/api/src/lib/password-hash.ts`: `hashPassword`, `verifyPassword` → `valid|invalid|legacy`, `needsRehash`, `DUMMY_PASSWORD_HASH`).
+- Hashes bcrypt legados (`$2b$…`): no Worker retornam `legacy` → login responde `401` pedindo redefinição; fora do Worker (dev local) são conferidos de verdade via bcryptjs para não travar o fluxo. Login válido com hash defasado regrava em PBKDF2 (re-hash transparente).
+- Rotação de `PASSWORD_PEPPER` (ou `JWT_SECRET` sem pepper dedicado) invalida todas as senhas — exige redefinição; não rotacionar casualmente.
 
 ## Portal do leitor (sessão isolada)
 
@@ -201,6 +225,7 @@ Formato padrão de erro: `{ "error": "<mensagem>" }`.
 DATABASE_URL="file:./dev.db"
 JWT_SECRET=<segredo forte>
 JWT_EXPIRES=8h            # opcional
+PASSWORD_PEPPER=<segredo p/ senhas>  # opcional; default = JWT_SECRET + '#pepper' (NÃO rotacionar: invalida senhas)
 READER_JWT_SECRET=<segredo do portal>  # opcional; default = JWT_SECRET + sufixo
 ADMIN_NAME=Administrador   # opcional
 ADMIN_EMAIL=voce@dominio.com
@@ -230,11 +255,13 @@ VITE_API_URL=http://localhost:3333/api   # opcional; padrão '/api' (proxy)
 
 - Envio via Nodemailer pelo SMTP do Zoho (`lib/mail.ts`: `sendEmail`, `passwordResetEmail`). Contas pessoais `@zohomail.com` usam `smtp.zoho.com` sem configurar DNS de domínio próprio.
 - Sem `ZOHO_EMAIL`/`ZOHO_APP_PASSWORD` (ou `MAIL_FROM`), o envio falha com erro `[email]` explícito — nunca silencioso.
-- Fluxo: `POST /auth|/readers/forgot-password` cria token aleatório (guardado como hash SHA-256 em `PasswordResetToken`, `lib/password-reset.ts`), validade 1 hora (`RESET_TOKEN_TTL_MS`), uso único; o link é `FRONTEND_URL/redefinir-senha?token=..&tipo=equipe|leitor`. Resposta sempre genérica (anti-enumeração de e-mails).
+- Fluxo: `POST /auth|/readers/forgot-password` cria token aleatório (guardado como hash SHA-256 em `PasswordResetToken`, `lib/password-reset.ts` via WebCrypto + client de banco injetável), validade 1 hora (`RESET_TOKEN_TTL_MS`), uso único; o link é `FRONTEND_URL/redefinir-senha?token=..&tipo=equipe|leitor`. Resposta sempre genérica (anti-enumeração de e-mails).
+- No Worker, o envio é pelo **Email Sending** (binding `EMAIL` em `wrangler.jsonc`, sem chaves — `worker/mail.ts`); remetente `MAIL_FROM` obrigatório e de domínio habilitado no Email Service; local simula (não entrega).
 
 ## Notas
 
 - Buscas textuais no SQLite (Prisma `contains`) são case-sensitive: CPF, números e títulos devem ser digitados conforme cadastrados.
-- Senhas com bcryptjs (compatível com bcrypt, sem dependência nativa no Windows).
+- Senhas com PBKDF2-SHA256 + pepper via WebCrypto (ver "Senhas (PBKDF2)" acima); bcrypt legado só pede redefinição no Worker.
+- Datetimes: `dev.db` usa millis INTEGER (nativo do engine; comparações numéricas corretas); D1 usa ISO-8601 TEXT (único legível no edge). Misturar formatos na mesma base quebra filtros por data — exportações p/ D1 convertem millis→ISO.
 - Comparação de nomes de autores para reaproveitamento é case-insensitive e feita em memória (o SQLite não suporta filtro `mode: 'insensitive'` no Prisma).
 - SQLite não suporta enums do Prisma: campos como `acquisitionType` são validados por Zod na borda da API e armazenados como String.

@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "biblioteca-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "JWT_EXPIRES": "8h",
+    "CORS_ORIGIN": "https://biblioteca-publica-opencode-monorepo.tersandropbs.workers.dev",
+    "FRONTEND_URL": "https://biblioteca-publica-opencode-monorepo.tersandropbs.workers.dev",
+    "MAIL_FROM": "biblioteca@legismemory.com"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "biblioteca-publica",
+      "database_id": "5fdd8892-2931-4325-8b15-fbfcc412eeff",
+      "migrations_dir": "prisma/migrations",
+      "migrations_pattern": "prisma/migrations/*/migration.sql"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "biblioteca-backups"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ]
+}

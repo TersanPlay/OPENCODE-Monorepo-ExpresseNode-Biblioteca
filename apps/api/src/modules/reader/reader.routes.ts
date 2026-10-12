@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import prisma from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { asyncHandler } from '../../middleware/async-handler';
@@ -7,6 +6,8 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
 import { cleanNull, dateOrNull, parse, paginationSchema, readerDeleteSchema, readerPasswordSchema, readerQuerySchema, readerSchema, readerSignatureSchema, readerStatusSchema, readerUpdateSchema } from '../../validation';
 import { refreshOverdue } from '../../lib/overdue';
+import { hashPassword } from '../../lib/password-hash';
+import { env } from '../../config/env';
 
 export const readerRouter = Router();
 
@@ -270,7 +271,7 @@ readerRouter.post(
     if (existing.deletedAt) throw new HttpError(409, 'Leitor excluído não pode ter senha alterada');
     await prisma.reader.update({
       where: { id },
-      data: { passwordHash: bcrypt.hashSync(data.password, 10) },
+      data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) },
     });
     await writeAudit(req.user?.id, 'READER_UPDATED', 'Reader', id, { password: true, byStaff: true }, req.ip);
     res.json({ ok: true });

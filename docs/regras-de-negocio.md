@@ -146,10 +146,11 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 ## Usuários do sistema
 
 - Papéis: `ADMIN` e `ATTENDANT`.
-- Senha mínima de 6 caracteres; hash bcrypt (10 rounds).
+- Senha mínima de 6 caracteres; hash PBKDF2-SHA256 (10k iterações + pepper, formato versionado `$pbkdf2$…`).
+- Hash bcrypt legado: no Worker o login responde `401` pedindo redefinição ("Esqueci a senha" ou balcão/administrador); fora do Worker (dev) continua conferindo. Login válido com parâmetros defasados regrava o hash (re-hash transparente).
 - Usuário inativo não autentica (o `requireAuth` rejeita status ≠ `ACTIVE`).
 - Primeiro acesso: criado no seed a partir de `ADMIN_EMAIL`/`ADMIN_PASSWORD` (não há credenciais padrão). Perfis adicionais são criados pela tela Usuários.
-- Assinatura da equipe (`/admin/usuarios`, ADMIN): modal exclusivo via botão **Assinatura** na tabela (separado do cadastro/edição) — mostra a salva, desenhar substitui, botão remove. Salva em `signature`/`signatureUpdatedAt` (`PATCH /users/:id/signature`). A salva do operador da operação é congelada no empréstimo/devolução (`createdBySignatureSnapshot`/`receivedBySignatureSnapshot`) e incorporada na coluna do responsável nos Termos (fallback p/ linhas manuais).
+- Assinatura da equipe (`/admin/usuarios`, ADMIN): modal exclusivo via botão **Assinatura** na tabela (separado do cadastro/edição) — mostra a salva, desenhar substitui, botão remove. Salva em `signature`/`signatureUpdatedAt` (`PATCH /users/:id/signature`). A página de perfil do usuário (`/admin/usuarios/:id`, clique no nome) também gerencia a aparência. A salva do operador da operação é congelada no empréstimo/devolução (`createdBySignatureSnapshot`/`receivedBySignatureSnapshot`) e incorporada na coluna do responsável nos Termos (fallback p/ linhas manuais).
 - Aparência da assinatura (`/admin/perfil`, qualquer papel — self-service via `PATCH /users/me/signature`): o campo `signature` continua sendo o PNG final (PDFs e `<img>` intactos); os metadados de aparência (`signatureType` TEXT/DRAW/IMAGE, `signatureText`, `rubricText`, `rubricImage`, `fontFamily`) permitem reeditar. Texto e rubrica são renderizados em fontes manuscritas (Google Fonts); Imagem converte upload para PNG no cliente (o backend só aceita `data:image/png`). Remover a assinatura limpa os metadados.
 
 ## Portal do leitor (autocadastro)
@@ -167,7 +168,7 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 - `POST /auth|/readers/forgot-password`: resposta sempre genérica (não revela se o e-mail existe). Equipe: envia se o usuário existir e estiver `ACTIVE`. Leitor: envia se existir, estiver `ACTIVE`, não excluído e **já tiver senha** (sem senha, usa o Primeiro acesso).
 - Token aleatório guardado como hash SHA-256 (`PasswordResetToken`), validade 1 hora, uso único. `POST /auth|/readers/reset-password` com token inválido/expirado retorna `400`.
 - Rate-limit 10/15 min nos 4 endpoints. Auditoria: `PASSWORD_RESET_REQUESTED`/`PASSWORD_RESET_DONE` (equipe), `READER_PASSWORD_RESET_REQUESTED`/`READER_PASSWORD_RESET_DONE` (leitor).
-- Envio via SMTP do Zoho (`ZOHO_EMAIL`/`ZOHO_APP_PASSWORD`); o link usa `FRONTEND_URL` — em produção deve ser a URL pública.
+- Envio via SMTP do Zoho (`ZOHO_EMAIL`/`ZOHO_APP_PASSWORD`) no Express; no Worker via Email Sending (binding, remetente `MAIL_FROM` de domínio habilitado); o link usa `FRONTEND_URL` — em produção deve ser a URL pública.
 
 ## Auditoria
 

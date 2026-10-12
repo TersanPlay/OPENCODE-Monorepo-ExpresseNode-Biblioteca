@@ -33,6 +33,6 @@ labelRouter.post(
     const pdf = await generateLabelsPDF(exemplares.map((exemplar) => ({ book, exemplar })));
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="etiquetas-livro-${book.id}.pdf"`);
-    res.send(pdf);
+    res.send(Buffer.from(pdf));
   }),
 );

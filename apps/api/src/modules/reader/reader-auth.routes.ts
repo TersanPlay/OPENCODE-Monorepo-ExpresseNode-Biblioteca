@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import crypto from 'node:crypto';
 import { z } from 'zod';
 import prisma from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
@@ -13,6 +11,12 @@ import { refreshOverdue } from '../../lib/overdue';
 import { env } from '../../config/env';
 import { passwordResetEmail, sendEmail } from '../../lib/mail';
 import { consumeResetToken, createResetToken } from '../../lib/password-reset';
+import {
+  DUMMY_PASSWORD_HASH,
+  hashPassword,
+  needsRehash,
+  verifyPassword,
+} from '../../lib/password-hash';
 import {
   cleanNull,
   dateOrNull,
@@ -29,7 +33,6 @@ import {
 
 export const readerAuthRouter = Router();
 
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
 const RESERVATION_DAYS = 3;
 
 // --- Autocadastro público: cria leitor ACTIVE + senha e já autentica ---
@@ -56,7 +59,7 @@ readerAuthRouter.post(
         city: cleanNull(data.city),
         state: cleanNull(data.state),
         status: 'ACTIVE',
-        passwordHash: bcrypt.hashSync(data.password, 10),
+        passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER),
       },
     });
     const token = signReaderToken(reader);
@@ -72,13 +75,27 @@ readerAuthRouter.post(
   asyncHandler(async (req, res) => {
     const data = parse(readerLoginSchema, req.body);
     const reader = await prisma.reader.findFirst({ where: { email: data.email, deletedAt: null } });
-    const valid = await bcrypt.compare(
+    const result = await verifyPassword(
       data.password,
       reader?.passwordHash ?? DUMMY_PASSWORD_HASH,
+      env.PASSWORD_PEPPER,
     );
-    if (!reader || !reader.passwordHash || !valid || reader.status !== 'ACTIVE') {
+    if (!reader || !reader.passwordHash || result === 'invalid' || reader.status !== 'ACTIVE') {
       await writeAudit(null, 'LOGIN_FAILED', 'Reader', reader?.id, { email: data.email }, req.ip);
       throw new HttpError(401, 'E-mail ou senha inválidos');
+    }
+    if (result === 'legacy') {
+      await writeAudit(null, 'LOGIN_FAILED', 'Reader', reader.id, { email: data.email, legacy: true }, req.ip);
+      throw new HttpError(
+        401,
+        'Sua senha precisa ser redefinida. Use "Esqueci a senha" ou peça ajuda no balcão.',
+      );
+    }
+    if (needsRehash(reader.passwordHash!)) {
+      await prisma.reader.update({
+        where: { id: reader.id },
+        data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) },
+      });
     }
     const token = signReaderToken(reader);
     await writeAudit(null, 'LOGIN', 'Reader', reader.id, undefined, req.ip);
@@ -106,7 +123,7 @@ readerAuthRouter.post(
     }
     const updated = await prisma.reader.update({
       where: { id: reader.id },
-      data: { passwordHash: bcrypt.hashSync(data.password, 10) },
+      data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) },
     });
     const token = signReaderToken(updated);
     await writeAudit(null, 'READER_UPDATED', 'Reader', reader.id, { self: true, claimed: true }, req.ip);
@@ -218,11 +235,11 @@ readerAuthRouter.post(
     const data = parse(readerSelfPasswordSchema, req.body);
     const existing = await prisma.reader.findUnique({ where: { id } });
     if (!existing || !existing.passwordHash) throw new HttpError(404, 'Leitor não encontrado');
-    const valid = await bcrypt.compare(data.currentPassword, existing.passwordHash);
-    if (!valid) throw new HttpError(401, 'Senha atual incorreta');
+    const valid = await verifyPassword(data.currentPassword, existing.passwordHash, env.PASSWORD_PEPPER);
+    if (valid !== 'valid') throw new HttpError(401, 'Senha atual incorreta');
     await prisma.reader.update({
       where: { id },
-      data: { passwordHash: bcrypt.hashSync(data.password, 10) },
+      data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) },
     });
     await writeAudit(null, 'READER_UPDATED', 'Reader', id, { self: true, password: true }, req.ip);
     res.json({ ok: true });
@@ -338,7 +355,7 @@ readerAuthRouter.post(
     if (!reader || reader.status !== 'ACTIVE') throw new HttpError(400, 'Link inválido ou expirado');
     await prisma.reader.update({
       where: { id: reader.id },
-      data: { passwordHash: bcrypt.hashSync(data.password, 10) },
+      data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) },
     });
     await writeAudit(null, 'READER_PASSWORD_RESET_DONE', 'Reader', reader.id, undefined, req.ip);
     res.json({ ok: true });

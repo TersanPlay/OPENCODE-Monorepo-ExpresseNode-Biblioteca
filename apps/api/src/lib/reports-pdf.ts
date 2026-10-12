@@ -1,5 +1,4 @@
-import PDFDocument from 'pdfkit';
-import { setupPdfFonts } from './pdf-fonts';
+import { Pdf, hex, sanitizeWinAnsi } from './pdf';
 
 export interface ReportPdfData {
   title: string;
@@ -10,16 +9,16 @@ export interface ReportPdfData {
 }
 
 const C = {
-  primary: '#087F8C',
-  ink: '#1A1A1A',
-  gray: '#6B7280',
-  grayLight: '#E5E7EB',
-  zebra: '#F6F4EE',
+  primary: hex('#087F8C'),
+  ink: hex('#1A1A1A'),
+  gray: hex('#6B7280'),
+  grayLight: hex('#E5E7EB'),
+  zebra: hex('#F6F4EE'),
+  white: hex('#FFFFFF'),
 };
 
 function sanitize(s: string): string {
-  // Com fonte TTF o Unicode vai fiel; só barra o fora do BMP.
-  return s.replace(/[^\x20-\uFFFF]/g, '?');
+  return sanitizeWinAnsi(s);
 }
 
 function fmtCell(v: string | number | null | undefined): string {
@@ -35,91 +34,88 @@ function fmtCell(v: string | number | null | undefined): string {
   return sanitize(s);
 }
 
-export function generateReportPDF(data: ReportPdfData): typeof PDFDocument {
+export async function generateReportPDF(data: ReportPdfData): Promise<Uint8Array> {
   // Paisagem comporta melhor tabelas com 3+ colunas.
-  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, bufferPages: true });
-  const F = setupPdfFonts(doc);
   const pageW = 841.89;
+  const pageH = 595.28;
   const contentW = pageW - 80;
   const bottom = 555.28 - 40;
 
-  const filterText = sanitize(Object.entries(data.filters)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join('  ·  '));
+  const filterText = sanitize(
+    Object.entries(data.filters)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('  ·  '),
+  );
   const title = sanitize(data.title);
 
-  const footer = () => {
-    // doc.save/restore não preserva doc.y — salva manual.
-    // Só Gerado em + filtros aqui; a numeração sai no loop final (1 passada).
-    const _y = doc.y;
-    const _x = doc.x;
-    doc.save().fontSize(7).font(F.regular).fillColor(C.gray);
-    doc.text(`Gerado em ${fmtCell(data.generatedAt)}`, 40, bottom + 8, { width: contentW });
-    if (filterText) doc.text(`Filtros - ${filterText}`, 40, bottom + 18, { width: contentW });
-    doc.restore();
-    doc.y = _y;
-    doc.x = _x;
+  const pdf = await Pdf.create();
+
+  const drawFooter = (pageBottom: number) => {
+    // Só Gerado em + filtros aqui; a numeração sai no fim (total conhecido).
+    pdf.text(`Gerado em ${fmtCell(data.generatedAt)}`, 40, pageBottom + 8, { size: 7, color: C.gray, width: contentW });
+    if (filterText) pdf.text(`Filtros - ${filterText}`, 40, pageBottom + 18, { size: 7, color: C.gray, width: contentW });
   };
 
-  const header = () => {
-    doc.fontSize(16).font(F.bold).fillColor(C.ink).text(title, 40, 40, { width: contentW });
-    doc.save().moveTo(40, 62).lineTo(40 + contentW, 62).lineWidth(0.8).strokeColor(C.primary).stroke().restore();
-    doc.y = 70;
+  const drawHeader = () => {
+    pdf.text(title, 40, 40, { size: 16, font: 'bold', color: C.ink, width: contentW });
+    pdf.line(40, 62, 40 + contentW, 62, C.primary, 0.8);
+    pdf.y = 70;
   };
 
   const n = Math.max(data.columns.length, 1);
   const colW = contentW / n;
 
   const drawHead = () => {
-    const y = doc.y;
-    doc.save().fillColor(C.ink).roundedRect(40, y, contentW, 18).fill();
-    doc.fontSize(7.5).font(F.bold).fillColor('#FFFFFF');
-    data.columns.forEach((c, i) => {
-      doc.text(c, 44 + i * colW, y + 5, { width: colW - 8 });
+    const y = pdf.y;
+    pdf.roundedRect(40, y, contentW, 18, 2, { fill: C.ink });
+    data.columns.forEach((col, i) => {
+      pdf.text(sanitize(col), 44 + i * colW, y + 5, { size: 7.5, font: 'bold', color: C.white, width: colW - 8 });
     });
-    doc.restore();
-    doc.y = y + 22;
+    pdf.y = y + 22;
   };
 
-  header();
-  drawHead();
-  footer();
+  const newPage = () => {
+    pdf.addPage(pageW, pageH);
+    drawHeader();
+    drawHead();
+    drawFooter(bottom);
+  };
+
+  newPage();
 
   data.rows.forEach((row, ri) => {
     const cells = data.columns.map((_, i) => fmtCell(row[i] ?? null));
-    doc.fontSize(7.5).font(F.regular);
-    const heights = cells.map((t, _i) => doc.heightOfString(t, { width: colW - 8 }));
+    const heights = cells.map((t) => pdf.heightOf(t, 7.5, 'regular', colW - 8));
     const h = Math.max(16, ...heights) + 6;
-    if (doc.y + h > bottom) {
-      doc.addPage();
-      header();
-      drawHead();
-      footer();
+    if (pdf.y + h > bottom) {
+      newPage();
     }
-    const y = doc.y;
+    const y = pdf.y;
     if (ri % 2 === 1) {
-      doc.save().fillColor(C.zebra).roundedRect(40, y, contentW, h).fill().restore();
+      pdf.roundedRect(40, y, contentW, h, 2, { fill: C.zebra });
     }
-    doc.fillColor(C.ink);
     cells.forEach((t, i) => {
-      doc.text(t, 44 + i * colW, y + 3, { width: colW - 8 });
+      pdf.text(t, 44 + i * colW, y + 3, { size: 7.5, color: C.ink, width: colW - 8 });
     });
-    doc.y = y + h + 2;
+    pdf.y = y + h + 2;
   });
 
   if (data.rows.length === 0) {
-    doc.fontSize(9).font(F.regular).fillColor(C.gray)
-      .text('Sem dados para os filtros selecionados.', 40, doc.y + 6, { width: contentW });
+    pdf.text('Sem dados para os filtros selecionados.', 40, pdf.y + 6, { size: 9, color: C.gray, width: contentW });
   }
 
-  // Numeração total correta (bufferPages permite revisitar).
-  const range = doc.bufferedPageRange();
-  for (let i = 0; i < range.count; i++) {
-    doc.switchToPage(i);
-    doc.save().fontSize(7).font(F.regular).fillColor(C.gray);
-    doc.text(`Página ${i + 1} de ${range.count}`, 40, bottom + 8, { width: contentW, align: 'right' });
-    doc.restore();
-  }
+  // Numeração total (páginas conhecidas só no fim).
+  const pages = pdf.doc.getPages();
+  pages.forEach((_p, i) => {
+    const save = { page: pdf.page, W: pdf.W, H: pdf.H };
+    pdf.page = pages[i];
+    pdf.W = pageW;
+    pdf.H = pageH;
+    pdf.text(`Página ${i + 1} de ${pages.length}`, 40, bottom + 8, { size: 7, color: C.gray, width: contentW, align: 'right' });
+    pdf.page = save.page;
+    pdf.W = save.W;
+    pdf.H = save.H;
+  });
 
-  return doc;
+  return pdf.save();
 }

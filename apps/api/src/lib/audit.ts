@@ -1,4 +1,5 @@
 import prisma from './prisma';
+import type { PrismaClient } from '../generated/prisma';
 
 export async function writeAudit(
   userId: number | null | undefined,
@@ -7,9 +8,10 @@ export async function writeAudit(
   entityId?: string | number,
   metadata?: unknown,
   ip?: string,
+  client: PrismaClient = prisma,
 ): Promise<void> {
   try {
-    await prisma.auditLog.create({
+    await client.auditLog.create({
       data: {
         userId: userId ?? null,
         action,

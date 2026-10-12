@@ -2,6 +2,8 @@
 
 URL base: `http://localhost:3333/api` (dev). Autenticação: `Authorization: Bearer <token>`.
 
+> Mesmo contrato no Express (dev local) e no Worker Hono + D1 (produção Cloudflare, `apps/api/src/worker.ts`): rotas, respostas e erros idênticos; JWTs HS256 valem nos dois runtimes.
+
 Formato de resposta paginada:
 
 ```json
@@ -24,7 +26,7 @@ Erros: sempre `{ "error": "<mensagem>" }` (ver docs/arquitetura.md → Tratament
 
 | Método | Rota | Auth | Descrição |
 |---|---|---|---|
-| POST | `/api/auth/login` | — | Login. Rate limit: 10/15 min. Retorna `{ token, user }` |
+| POST | `/api/auth/login` | — | Login. Rate limit: 10/15 min. Retorna `{ token, user }`. Hash bcrypt legado → `401` orientando redefinição; login válido com hash defasado faz re-hash transparente |
 | GET | `/api/auth/me` | ✅ | Usuário autenticado (`{ user }`) |
 | POST | `/api/auth/logout` | ✅ | Registra auditoria de logout; `{ ok: true }` |
 | POST | `/api/auth/forgot-password` | — | Recuperação de senha: `{ email }`. Resposta sempre genérica `{ ok: true, message }` (anti-enumeração). Rate limit: 10/15 min |
@@ -142,7 +144,7 @@ Autenticação própria da tabela `Reader` (secret JWT distinto do staff + `typ:
 | Método | Rota | Auth | Descrição |
 |---|---|---|---|
 | POST | `/api/readers/register` | — | Autocadastro: `readerSchema` + `email` (obrigatório, único) + `password` (mín. 6). Cria `ACTIVE` e já retorna `{ token, reader }`. `409` CPF/e-mail duplicado |
-| POST | `/api/readers/login` | — | `{ email, password }` → `{ token, reader }`. `401` genérico (incl. excluído, inativo ou sem senha) |
+| POST | `/api/readers/login` | — | `{ email, password }` → `{ token, reader }`. `401` genérico (incl. excluído, inativo ou sem senha); hash bcrypt legado → `401` orientando redefinição |
 | POST | `/api/readers/claim` | — | Primeiro acesso: `{ cpf, email, password }`. CPF aceito com ou sem máscara; e-mail comparado sem caixa; exige `ACTIVE`, não excluído, e-mail igual e conta ainda sem senha. `401` genérico caso contrário |
 | POST | `/api/readers/forgot-password` | — | Recuperação de senha: `{ email }`. Resposta sempre genérica (anti-enumeração). Só envia se o leitor existir, estiver `ACTIVE`, não excluído e **já tiver senha**. Rate limit: 10/15 min |
 | POST | `/api/readers/reset-password` | — | Redefine com token: `{ token, password (mín. 6) }`. `400` link inválido ou expirado. Token de 1 hora, uso único; auditoria `READER_PASSWORD_RESET_REQUESTED` / `READER_PASSWORD_RESET_DONE` |

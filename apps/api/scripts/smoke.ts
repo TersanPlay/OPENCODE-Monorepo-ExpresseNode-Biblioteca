@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../src/lib/password-hash';
+import { env } from '../src/config/env';
 import prisma from '../src/lib/prisma';
 import { app } from '../src/app';
 import type { Server } from 'http';
@@ -78,11 +79,11 @@ async function main() {
     for (const u of fixtureUsers) {
       await prisma.user.upsert({
         where: { email: u.email },
-        update: { passwordHash: await bcrypt.hash(u.password, 10), status: 'ACTIVE' },
+        update: { passwordHash: await hashPassword(u.password, env.PASSWORD_PEPPER), status: 'ACTIVE' },
         create: {
           name: u.name,
           email: u.email,
-          passwordHash: await bcrypt.hash(u.password, 10),
+          passwordHash: await hashPassword(u.password, env.PASSWORD_PEPPER),
           role: u === FIX_ADMIN ? 'ADMIN' : 'ATTENDANT',
         },
       });

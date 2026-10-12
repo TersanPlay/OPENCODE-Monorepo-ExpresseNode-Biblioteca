@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import crypto from 'node:crypto';
 import prisma from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { asyncHandler } from '../../middleware/async-handler';
@@ -10,11 +8,15 @@ import { writeAudit } from '../../lib/audit';
 import { env } from '../../config/env';
 import { passwordResetEmail, sendEmail } from '../../lib/mail';
 import { consumeResetToken, createResetToken } from '../../lib/password-reset';
+import {
+  DUMMY_PASSWORD_HASH,
+  hashPassword,
+  needsRehash,
+  verifyPassword,
+} from '../../lib/password-hash';
 import { forgotPasswordSchema, loginSchema, parse, resetPasswordWithTokenSchema } from '../../validation';
 
 export const authRouter = Router();
-
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
 
 function publicUser(u: {
   id: number;
@@ -38,10 +40,27 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const data = parse(loginSchema, req.body);
     const user = await prisma.user.findUnique({ where: { email: data.email } });
-    const valid = await bcrypt.compare(data.password, user ? user.passwordHash : DUMMY_PASSWORD_HASH);
-    if (!user || !valid || user.status !== 'ACTIVE') {
+    const result = await verifyPassword(
+      data.password,
+      user ? user.passwordHash : DUMMY_PASSWORD_HASH,
+      env.PASSWORD_PEPPER,
+    );
+    if (!user || result === 'invalid' || user.status !== 'ACTIVE') {
       await writeAudit(null, 'LOGIN_FAILED', 'User', user?.id, { email: data.email }, req.ip);
       throw new HttpError(401, 'E-mail ou senha inválidos');
+    }
+    if (result === 'legacy') {
+      await writeAudit(user.id, 'LOGIN_FAILED', 'User', user.id, { email: data.email, legacy: true }, req.ip);
+      throw new HttpError(
+        401,
+        'Sua senha precisa ser redefinida. Use "Esqueci a senha" ou peça ao administrador.',
+      );
+    }
+    if (needsRehash(user.passwordHash)) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) },
+      });
     }
     const token = signToken(user);
     await writeAudit(user.id, 'LOGIN', 'User', user.id, undefined, req.ip);
@@ -96,7 +115,7 @@ authRouter.post(
     if (!user || user.status !== 'ACTIVE') throw new HttpError(400, 'Link inválido ou expirado');
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: bcrypt.hashSync(data.password, 10) },
+      data: { passwordHash: await hashPassword(data.password, env.PASSWORD_PEPPER) },
     });
     await writeAudit(user.id, 'PASSWORD_RESET_DONE', 'User', user.id, undefined, req.ip);
     res.json({ ok: true });
