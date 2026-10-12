@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import type { DashboardData, Loan, LoanStatus } from '@library/shared';
 import { MS_PER_DAY, refreshOverdue } from '../../lib/overdue';
+import { stripLoanBlobs } from '../../lib/strip-signature-blobs';
 import { prismaOf } from '../db';
 import { requireAuth } from '../auth';
 import { loanInclude } from '../loan-include';
@@ -64,29 +66,41 @@ dashboardApp.get('/', async (c) => {
     select: { id: true, title: true },
   });
   const titleMap = new Map(bookTitles.map((b) => [b.id, b.title]));
-  const _topBooks = topBooksRaw.map((g) => ({
+  const topBooks = topBooksRaw.map((g) => ({
     title: titleMap.get(g.bookId) ?? `Livro #${g.bookId}`,
     count: g._count._all,
   }));
 
-  const shape = (l: (typeof recentLoans)[number]) => ({
-    ...l,
-    loanDate: iso(l.loanDate),
-    dueDate: iso(l.dueDate),
+  // Assinaturas/rubricas são PNG em base64 e somavam ~130 KB por empréstimo
+  // (reader.signature, reader.rubricImage, createdBySignatureSnapshot...). O
+  // painel não exibe nenhum deles, então saem daqui (ver `strip-signature-blobs`):
+  // sem isso o dashboard entrega ~1 MB por carga.
+  type LoanRow = (typeof recentLoans)[number];
+
+  const shape = (l: LoanRow) => ({
+    ...stripLoanBlobs(l),
+    status: l.status as LoanStatus,
+    loanDate: l.loanDate.toISOString(),
+    dueDate: l.dueDate.toISOString(),
     returnedAt: iso(l.returnedAt),
     createdAt: iso(l.createdAt),
     updatedAt: iso(l.updatedAt),
   });
 
-  return c.json({
+  // O `c.json` serializa as `Date` aninhadas (reader/book) em ISO-8601, então o
+  // payload real já satisfaz o contrato; o TS não enxerga essa conversão — por
+  // isso o cast fica só nas listas, e o topo continua checado de verdade.
+  const payload: DashboardData = {
     totalBooks,
     availableBooks,
     loanedBooks: activeLoans,
     activeReaders,
     activeLoans,
     overdueLoans,
-    recentLoans: recentLoans.map(shape),
-    recentReturns: recentReturns.map(shape),
-    overdue: overdue.map(shape),
-  });
+    topBooks,
+    recentLoans: recentLoans.map(shape) as unknown as Loan[],
+    recentReturns: recentReturns.map(shape) as unknown as Loan[],
+    overdue: overdue.map(shape) as unknown as Loan[],
+  };
+  return c.json(payload);
 });

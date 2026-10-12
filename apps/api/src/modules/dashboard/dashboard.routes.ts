@@ -4,6 +4,7 @@ import { asyncHandler } from '../../middleware/async-handler';
 import { requireAuth } from '../../middleware/auth';
 import { loanInclude } from '../loan/loan.routes';
 import { refreshOverdue, MS_PER_DAY } from '../../lib/overdue';
+import { stripLoanBlobs } from '../../lib/strip-signature-blobs';
 
 export const dashboardRouter = Router();
 
@@ -78,7 +79,7 @@ dashboardRouter.get(
       activeLoans,
       overdueLoans,
       recentLoans: recentLoans.map((l) => ({
-        ...l,
+        ...stripLoanBlobs(l),
         loanDate: iso(l.loanDate),
         dueDate: iso(l.dueDate),
         returnedAt: iso(l.returnedAt),
@@ -86,7 +87,7 @@ dashboardRouter.get(
         updatedAt: iso(l.updatedAt),
       })),
       recentReturns: recentReturns.map((l) => ({
-        ...l,
+        ...stripLoanBlobs(l),
         loanDate: iso(l.loanDate),
         dueDate: iso(l.dueDate),
         returnedAt: iso(l.returnedAt),
@@ -94,7 +95,7 @@ dashboardRouter.get(
         updatedAt: iso(l.updatedAt),
       })),
       overdue: overdue.map((l) => ({
-        ...l,
+        ...stripLoanBlobs(l),
         loanDate: iso(l.loanDate),
         dueDate: iso(l.dueDate),
         returnedAt: iso(l.returnedAt),

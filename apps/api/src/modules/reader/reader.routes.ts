@@ -4,6 +4,7 @@ import { HttpError } from '../../lib/http-error';
 import { asyncHandler } from '../../middleware/async-handler';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
+import { stripReaderBlobs } from '../../lib/strip-signature-blobs';
 import { cleanNull, dateOrNull, parse, paginationSchema, readerDeleteSchema, readerPasswordSchema, readerQuerySchema, readerSchema, readerSignatureSchema, readerStatusSchema, readerUpdateSchema } from '../../validation';
 import { refreshOverdue } from '../../lib/overdue';
 import { hashPassword } from '../../lib/password-hash';
@@ -13,8 +14,10 @@ export const readerRouter = Router();
 
 readerRouter.use(requireAuth);
 
+// Listagem: sem `signature`/`rubricImage` (PNG em base64, ~85 KB por leitor).
+// A tela de detalhe (`/admin/leitores/:id`) continua recebendo tudo.
 function mapReader(r: any, activeLoans = 0) {
-  return { ...r, activeLoans };
+  return { ...stripReaderBlobs(r), activeLoans };
 }
 
 readerRouter.get(

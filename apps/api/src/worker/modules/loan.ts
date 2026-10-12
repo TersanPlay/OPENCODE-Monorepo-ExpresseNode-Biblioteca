@@ -5,6 +5,7 @@ import { HttpError } from '../../lib/http-error';
 import { writeAudit } from '../../lib/audit';
 import { computeDueDate, expireReservations, refreshOverdue } from '../../lib/overdue';
 import { getSettings } from '../../lib/settings';
+import { stripLoanBlobsMany, stripReaderBlobs } from '../../lib/strip-signature-blobs';
 import {
   generateBatchReturnTermPDF,
   generateLoanTermPDF,
@@ -259,7 +260,7 @@ loanApp.get('/', requireAuth, async (c) => {
     skip: (q.page - 1) * q.pageSize,
     take: q.pageSize,
   });
-  return c.json({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.ceil(total / q.pageSize) });
+  return c.json({ items: stripLoanBlobsMany(items), total, page: q.page, pageSize: q.pageSize, totalPages: Math.ceil(total / q.pageSize) });
 });
 
 loanApp.get('/search', requireAuth, async (c) => {
@@ -285,7 +286,7 @@ loanApp.get('/search', requireAuth, async (c) => {
     orderBy: { createdAt: 'desc' },
     take: 20,
   });
-  return c.json({ items });
+  return c.json({ items: stripLoanBlobsMany(items) });
 });
 
 loanApp.post('/', requireAuth, async (c) => {
@@ -514,8 +515,8 @@ loanApp.get('/returns/pending', requireAuth, async (c) => {
   }
   const items = [...groups.values()]
     .map((g) => ({
-      reader: g.reader,
-      loans: g.loans,
+      reader: g.reader ? stripReaderBlobs(g.reader) : g.reader,
+      loans: stripLoanBlobsMany(g.loans),
       activeCount: g.loans.length,
       overdueCount: g.loans.filter((l) => l.status === 'OVERDUE').length,
     }))

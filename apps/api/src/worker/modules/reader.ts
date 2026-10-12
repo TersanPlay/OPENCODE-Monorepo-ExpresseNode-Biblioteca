@@ -3,6 +3,7 @@ import { HttpError } from '../../lib/http-error';
 import { hashPassword } from '../../lib/password-hash';
 import { writeAudit } from '../../lib/audit';
 import { refreshOverdue } from '../../lib/overdue';
+import { stripReaderBlobs } from '../../lib/strip-signature-blobs';
 import { prismaOf } from '../db';
 import { requireAuth, requireRoles } from '../auth';
 import { passwordPepper } from '../env';
@@ -26,8 +27,10 @@ export const readerApp = new Hono<AppEnv>();
 
 readerApp.use(requireAuth);
 
+// Listagem: sem `signature`/`rubricImage` (PNG em base64, ~85 KB por leitor).
+// A tela de detalhe (`/admin/leitores/:id`) continua recebendo tudo.
 function mapReader(r: unknown, activeLoans = 0) {
-  return { ...(r as Record<string, unknown>), activeLoans };
+  return { ...stripReaderBlobs(r as Record<string, unknown>), activeLoans };
 }
 
 readerApp.get('/', async (c) => {

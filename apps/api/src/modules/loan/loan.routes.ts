@@ -8,6 +8,7 @@ import { requireAuth } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
 import { computeDueDate, expireReservations, refreshOverdue } from '../../lib/overdue';
 import { getSettings } from '../../lib/settings';
+import { stripLoanBlobsMany, stripReaderBlobs } from '../../lib/strip-signature-blobs';
 import { generateBatchReturnTermPDF, generateLoanTermPDF, generateReturnTermPDF } from '../../lib/terms';
 import { requireReader } from '../../lib/reader-auth';
 import { dateOrNull, listQuerySchema, loanBatchCreateSchema, loanCreateSchema, loanQuerySchema, loanReturnBatchSchema, loanReturnSchema, parse } from '../../validation';
@@ -249,7 +250,7 @@ loanRouter.get(
       skip: (q.page - 1) * q.pageSize,
       take: q.pageSize,
     });
-    res.json({ items, total, page: q.page, pageSize: q.pageSize, totalPages: Math.ceil(total / q.pageSize) });
+    res.json({ items: stripLoanBlobsMany(items), total, page: q.page, pageSize: q.pageSize, totalPages: Math.ceil(total / q.pageSize) });
   }),
 );
 
@@ -279,7 +280,7 @@ loanRouter.get(
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    res.json({ items });
+    res.json({ items: stripLoanBlobsMany(items) });
   }),
 );
 
@@ -532,8 +533,8 @@ loanRouter.get(
     }
     const items = [...groups.values()]
       .map((g) => ({
-        reader: g.reader,
-        loans: g.loans,
+        reader: g.reader ? stripReaderBlobs(g.reader) : g.reader,
+        loans: stripLoanBlobsMany(g.loans),
         activeCount: g.loans.length,
         overdueCount: g.loans.filter((l) => l.status === 'OVERDUE').length,
       }))
