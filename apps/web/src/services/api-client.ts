@@ -1,7 +1,23 @@
 import axios from 'axios';
 
+/**
+ * URL base da API. Ordem: env de build (dev/local) > constante de runtime em
+ * `index.html` (produção) > `/api` relativo (fallback do dev, via proxy do
+ * Vite). Em produção a constante de runtime vence, então um rebuild feito sem
+ * `VITE_API_URL` não quebra o deploy.
+ */
+function resolveBaseUrl(): string {
+  return (
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.PROD ? window.__API_BASE_URL__ : undefined) ||
+    '/api'
+  );
+}
+
+const baseURL = resolveBaseUrl();
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -35,7 +51,7 @@ api.interceptors.response.use(
 
 // --- Portal do leitor: instância isolada (token e sessão próprios) ---
 export const apiReader = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL,
   headers: { 'Content-Type': 'application/json' },
 });
 

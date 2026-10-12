@@ -14,6 +14,15 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      URL da API resolvida em runtime (e não em build time) para que qualquer
+      rebuild automático do repositório não gere um bundle apontando para o
+      caminho relativo "/api" do próprio worker de assets (que responde 405 em
+      POST). Em dev, o Vite faz proxy de /api para a API local.
+    -->
+    <script>
+      window.__API_BASE_URL__ = 'https://biblioteca-api.tersandropbs.workers.dev/api';
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
