@@ -168,7 +168,7 @@ Novo prazo: `base + defaultLoanDays`, onde `base` = `dueDate` atual (se ainda fu
 - `POST /auth|/readers/forgot-password`: resposta sempre genérica (não revela se o e-mail existe). Equipe: envia se o usuário existir e estiver `ACTIVE`. Leitor: envia se existir, estiver `ACTIVE`, não excluído e **já tiver senha** (sem senha, usa o Primeiro acesso).
 - Token aleatório guardado como hash SHA-256 (`PasswordResetToken`), validade 1 hora, uso único. `POST /auth|/readers/reset-password` com token inválido/expirado retorna `400`.
 - Rate-limit 10/15 min nos 4 endpoints. Auditoria: `PASSWORD_RESET_REQUESTED`/`PASSWORD_RESET_DONE` (equipe), `READER_PASSWORD_RESET_REQUESTED`/`READER_PASSWORD_RESET_DONE` (leitor).
-- Envio via SMTP do Zoho (`ZOHO_EMAIL`/`ZOHO_APP_PASSWORD`) no Express; no Worker via Email Sending (binding, remetente `MAIL_FROM` de domínio habilitado); o link usa `FRONTEND_URL` — em produção deve ser a URL pública.
+- Envio via SMTP do Zoho (`ZOHO_EMAIL`/`ZOHO_APP_PASSWORD`) no Express (dev local). **Em produção o envio está desabilitado**: sem o binding `EMAIL`/var `MAIL_FROM`, a recuperação de senha responde `503` — a troca de senha só é possível para quem já está autenticado. O link usa `FRONTEND_URL` — em produção deve ser a URL pública.
 
 ## Auditoria
 

@@ -8,7 +8,8 @@ import type { D1Database, R2Bucket, SendEmail } from '@cloudflare/workers-types'
 export interface WorkerEnv {
   DB: D1Database;
   BACKUPS: R2Bucket;
-  EMAIL: SendEmail;
+  /** Binding de Email Sending — opcional: ausente = envio desabilitado. */
+  EMAIL?: SendEmail;
   JWT_SECRET: string;
   JWT_EXPIRES?: string;
   READER_JWT_SECRET?: string;

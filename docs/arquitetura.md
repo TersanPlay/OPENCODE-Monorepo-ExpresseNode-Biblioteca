@@ -1,4 +1,4 @@
-# Arquitetura
+﻿# Arquitetura
 
 ## Visão geral
 
@@ -54,9 +54,9 @@ Metodologia UI Architect ASJ: canvas `#F2F2F0`, primary `#087F8C`, superfícies 
 ## Worker + D1 (produção Cloudflare)
 
 - Entrada: `apps/api/src/worker.ts` (Hono) — monta `/api/health` e os 15 domínios: `auth`, `users`, `readers` (portal + balcão), `books`, `reservations`, `loans`, `reports`, `labels`, `settings`, `audit`, `dashboard`, `categories`, `authors`, `backups`.
-- `apps/api/src/worker/`: `env.ts` (vars/secrets + defaults iguais ao Express), `context.ts` (tipos `AppEnv`), `db.ts` (Prisma por requisição via binding `DB`), `http.ts` (`reqJson`, `clientIp`), `errors.ts` (mesmo mapa de erros do Express), `auth.ts` (JWT `jose`, `publicReader`), `rate-limit.ts` (janela deslizante), `mail.ts` (Email Sending via binding `EMAIL`), `modules/` (portagens dos 15 domínios).
+- `apps/api/src/worker/`: `env.ts` (vars/secrets + defaults iguais ao Express), `context.ts` (tipos `AppEnv`), `db.ts` (Prisma por requisição via binding `DB`), `http.ts` (`reqJson`, `clientIp`), `errors.ts` (mesmo mapa de erros do Express), `auth.ts` (JWT `jose`, `publicReader`), `rate-limit.ts` (janela deslizante), `mail.ts` (envio opcional: sem binding `EMAIL` a API responde 503), `modules/` (portagens dos 15 domínios).
 - O código Express (`app.ts`, `modules/`) segue intacto para o dev local — libs compartilhadas aceitam client injetável (`writeAudit`, `create/consumeResetToken`, `refreshOverdue`, `expireReservations`).
-- `apps/api/wrangler.jsonc`: worker `biblioteca-api`, `compatibility_date` atual, `compatibility_flags: ["nodejs_compat"]`, bindings `DB` → D1 `biblioteca-publica`, `BACKUPS` → R2 `biblioteca-backups`, `EMAIL` → Email Sending; `migrations_dir: prisma/migrations` (+ `migrations_pattern` p/ layout `0001_init/migration.sql`), observability (logs + traces).
+- `apps/api/wrangler.jsonc`: worker `biblioteca-api`, `compatibility_date` atual, `compatibility_flags: ["nodejs_compat"]`, bindings `DB` → D1 `biblioteca-publica` e `BACKUPS` → R2 `biblioteca-backups`; `migrations_dir: prisma/migrations` (+ `migrations_pattern` p/ layout `0001_init/migration.sql`), observability (logs + traces).
 - Banco: `prisma/migrations/0001_init/migration.sql` gerado via `prisma migrate diff --from-empty`; dados importados com datetimes em ISO-8601 (único formato legível no edge).
 - Typecheck duplo: `tsc --noEmit` (Express, exclui `src/worker`) + `tsc --noEmit -p tsconfig.worker.json` (Worker, `types: []`, inclui `worker-configuration.d.ts` gerado por `wrangler types`).
 - Dev local do Worker: `wrangler d1 migrations apply DB --local` + `wrangler dev --port 8787` (D1 local em `.wrangler/`, secrets em `.dev.vars` — ambos gitignored).
@@ -71,7 +71,7 @@ Metodologia UI Architect ASJ: canvas `#F2F2F0`, primary `#087F8C`, superfícies 
 | R2 | `biblioteca-backups` |
 
 - `JWT_SECRET` é **secret** (`wrangler secret put JWT_SECRET --name biblioteca-api`); o pepper de senha deriva dele (`${JWT_SECRET}#pepper`) — trocar o secret invalida senhas e sessões.
-- O resto vai em `vars` no `wrangler.jsonc` (versionado): `JWT_EXPIRES`, `CORS_ORIGIN`, `FRONTEND_URL`, `MAIL_FROM`.
+- O resto vai em `vars` no `wrangler.jsonc` (versionado): `JWT_EXPIRES`, `CORS_ORIGIN`, `FRONTEND_URL`.
 - Deploy da API (a partir de `apps/api`): `pnpm exec wrangler deploy`.
 - Deploy do web: build com a URL da API embutida e upload de assets a partir de `apps/api` (o wrangler está lá):
   ```
@@ -276,7 +276,8 @@ VITE_API_URL=http://localhost:3333/api   # opcional; padrão '/api' (proxy)
 - Envio via Nodemailer pelo SMTP do Zoho (`lib/mail.ts`: `sendEmail`, `passwordResetEmail`). Contas pessoais `@zohomail.com` usam `smtp.zoho.com` sem configurar DNS de domínio próprio.
 - Sem `ZOHO_EMAIL`/`ZOHO_APP_PASSWORD` (ou `MAIL_FROM`), o envio falha com erro `[email]` explícito — nunca silencioso.
 - Fluxo: `POST /auth|/readers/forgot-password` cria token aleatório (guardado como hash SHA-256 em `PasswordResetToken`, `lib/password-reset.ts` via WebCrypto + client de banco injetável), validade 1 hora (`RESET_TOKEN_TTL_MS`), uso único; o link é `FRONTEND_URL/redefinir-senha?token=..&tipo=equipe|leitor`. Resposta sempre genérica (anti-enumeração de e-mails).
-- No Worker, o envio é pelo **Email Sending** (binding `EMAIL` em `wrangler.jsonc`, sem chaves — `worker/mail.ts`); remetente `MAIL_FROM` obrigatório e de domínio habilitado no Email Service; local simula (não entrega).
+- **Produção (Cloudflare): envio desabilitado.** O `wrangler.jsonc` não tem o binding `send_email` nem a var `MAIL_FROM`; `worker/mail.ts` responde `503 "Envio de e-mail desabilitado nesta instalação."` (equipe) em vez de tentar enviar. A recuperação de senha por e-mail, portanto, não funciona em produção — a troca de senha continua disponível para quem está autenticado (`POST /users/:id/password`).
+- Para reativar: acrescentar `"send_email": [{ "name": "EMAIL" }]` e a var `MAIL_FROM` em `wrangler.jsonc`, com o domínio de remetente habilitado no Email Service + DNS validado (o token OAuth do deploy não tem escopo de zona para automatizar esse onboarding).
 
 ## Notas
 

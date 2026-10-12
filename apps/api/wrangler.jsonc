@@ -7,8 +7,7 @@
   "vars": {
     "JWT_EXPIRES": "8h",
     "CORS_ORIGIN": "https://biblioteca-publica-opencode-monorepo.tersandropbs.workers.dev",
-    "FRONTEND_URL": "https://biblioteca-publica-opencode-monorepo.tersandropbs.workers.dev",
-    "MAIL_FROM": "biblioteca@legismemory.com"
+    "FRONTEND_URL": "https://biblioteca-publica-opencode-monorepo.tersandropbs.workers.dev"
   },
   "observability": {
     "enabled": true,
@@ -38,11 +37,6 @@
     {
       "binding": "BACKUPS",
       "bucket_name": "biblioteca-backups"
-    }
-  ],
-  "send_email": [
-    {
-      "name": "EMAIL"
     }
   ]
 }

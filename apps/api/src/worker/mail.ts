@@ -14,8 +14,16 @@ export { passwordResetEmail };
 /**
  * Envio via Email Sending da Cloudflare (binding `EMAIL`, sem chaves).
  * O remetente precisa ser de um domínio habilitado no Email Service.
+ *
+ * O envio é opcional: sem o binding `EMAIL` ou sem `MAIL_FROM` a API responde
+ * 503 com mensagem explícita em vez de tentar enviar. Para (re)ativar, acrescente
+ * o binding `"send_email": [{ "name": "EMAIL" }]` e a var `MAIL_FROM` em
+ * `wrangler.jsonc`, com o domínio habilitado no Email Service.
  */
 export async function sendEmail(env: WorkerEnv, input: SendEmailInput): Promise<void> {
+  if (!env.EMAIL) {
+    throw new HttpError(503, 'Envio de e-mail desabilitado nesta instalação.');
+  }
   const from = env.MAIL_FROM?.trim();
   if (!from) {
     throw new HttpError(503, 'Remetente não configurado (MAIL_FROM). Contate o administrador.');
