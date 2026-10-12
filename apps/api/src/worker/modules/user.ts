@@ -64,7 +64,22 @@ userApp.get('/', async (c) => {
   const total = await prisma.user.count({ where });
   const items = await prisma.user.findMany({
     where,
-    select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, signature: true, signatureUpdatedAt: true, signatureType: true, signatureText: true, rubricText: true, rubricImage: true, fontFamily: true },
+    // A listagem não traz as imagens da assinatura (PNG em base64, ~85 KB por
+    // usuário): a tela busca o usuário completo em `/users/:id` só ao abrir o
+    // editor. Metadados continuam, para a lista indicar quem tem assinatura.
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      status: true,
+      createdAt: true,
+      signatureUpdatedAt: true,
+      signatureType: true,
+      signatureText: true,
+      rubricText: true,
+      fontFamily: true,
+    },
     orderBy: { name: 'asc' },
     skip: (q.page - 1) * q.pageSize,
     take: q.pageSize,

@@ -55,44 +55,50 @@ export function NewLoanPage() {
   });
   const dueDatePreview = watch('dueDate');
 
-  const searchReaders = async (q: string) => {
+  const searchReaders = async (q: string, signal?: AbortSignal) => {
     if (!q.trim()) {
       setReaderResult(null);
       return;
     }
     setReaderLoading(true);
     try {
-      setReaderResult(await readersApi.list({ search: q, pageSize: 8 }));
+      setReaderResult(await readersApi.list({ search: q, pageSize: 8 }, signal));
     } catch {
-      setReaderResult(null);
+      if (!signal?.aborted) setReaderResult(null);
     } finally {
-      setReaderLoading(false);
+      if (!signal?.aborted) setReaderLoading(false);
     }
   };
 
-  const searchBooks = async (q: string) => {
+  const searchBooks = async (q: string, signal?: AbortSignal) => {
     if (!q.trim()) {
       setBookResult(null);
       return;
     }
     setBookLoading(true);
     try {
-      setBookResult(await booksApi.list({ search: q, pageSize: 8, includeArchived: 1 }));
+      setBookResult(await booksApi.list({ search: q, pageSize: 8, includeArchived: 1 }, signal));
     } catch {
-      setBookResult(null);
+      if (!signal?.aborted) setBookResult(null);
     } finally {
-      setBookLoading(false);
+      if (!signal?.aborted) setBookLoading(false);
     }
   };
 
+  // Uma requisição por pausa de digitação, e a anterior é cancelada de verdade:
+  // sem isso, a resposta de "dom" podia chegar depois da de "dom casmurro".
   useEffect(() => {
-    if (readerDebounced.trim()) searchReaders(readerDebounced);
-
+    if (!readerDebounced.trim()) return;
+    const controller = new AbortController();
+    searchReaders(readerDebounced, controller.signal);
+    return () => controller.abort();
   }, [readerDebounced]);
 
   useEffect(() => {
-    if (bookDebounced.trim()) searchBooks(bookDebounced);
-
+    if (!bookDebounced.trim()) return;
+    const controller = new AbortController();
+    searchBooks(bookDebounced, controller.signal);
+    return () => controller.abort();
   }, [bookDebounced]);
 
   useEffect(() => {

@@ -53,6 +53,7 @@ export function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [sigUser, setSigUser] = useState<User | null>(null);
   const [sigBusy, setSigBusy] = useState(false);
+  const [sigLoading, setSigLoading] = useState(false);
   const sigEditorRef = useRef<AppearanceEditorHandle>(null);
   const { toast } = useApiToast();
   const { user: me } = useAuth();
@@ -74,8 +75,17 @@ export function UsersPage() {
     setDialogOpen(true);
   };
 
-  const openSignature = (u: User) => {
-    setSigUser(u);
+  // A listagem não traz as imagens da assinatura (PNG em base64): buscamos o
+  // usuário completo só ao abrir o editor.
+  const openSignature = async (u: User) => {
+    setSigLoading(true);
+    try {
+      setSigUser(await usersApi.get(u.id));
+    } catch {
+      toast.error('Não foi possível carregar a assinatura.');
+    } finally {
+      setSigLoading(false);
+    }
   };
 
   const submit = async (v: z.infer<typeof schema>) => {
@@ -297,14 +307,18 @@ export function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!sigUser} onOpenChange={(o) => !o && setSigUser(null)}>
+      <Dialog open={!!sigUser || sigLoading} onOpenChange={(o) => !o && setSigUser(null)}>
         <DialogContent>
           <DialogHeader
             title="Assinatura digital"
             description={sigUser ? `${sigUser.name} · ${sigUser.email}` : undefined}
           />
           <DialogBody>
-            {sigUser?.signature ? (
+            {sigLoading && !sigUser ? (
+              <p className="mb-4 rounded-card bg-surfaceBlue2 px-4 py-3 text-[12.5px] text-primary-dark">
+                Carregando assinatura…
+              </p>
+            ) : sigUser?.signature ? (
               <div className="mb-4">
                 <Label>Assinatura salva</Label>
                 <img src={sigUser.signature} alt="Assinatura salva" className="mt-1 aspect-[13/4] w-full rounded-small border border-black/10 bg-white object-contain" />

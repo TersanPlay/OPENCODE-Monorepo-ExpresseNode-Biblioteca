@@ -3,7 +3,8 @@ import { HttpError } from '../../lib/http-error';
 import { hashPassword } from '../../lib/password-hash';
 import { writeAudit } from '../../lib/audit';
 import { refreshOverdue } from '../../lib/overdue';
-import { stripReaderBlobs } from '../../lib/strip-signature-blobs';
+import { stripLoanBlobsMany, stripReaderBlobs } from '../../lib/strip-signature-blobs';
+import { readerListSelect } from '../../lib/reader-select';
 import { prismaOf } from '../db';
 import { requireAuth, requireRoles } from '../auth';
 import { passwordPepper } from '../env';
@@ -46,6 +47,9 @@ readerApp.get('/', async (c) => {
   const total = await prisma.reader.count({ where });
   const items = await prisma.reader.findMany({
     where,
+    // `select` explícito: mantém `signature` (reaproveitada no formulário de
+    // empréstimo) e descarta `passwordHash`/`rubricImage`.
+    select: readerListSelect,
     orderBy: { name: 'asc' },
     skip: (q.page - 1) * q.pageSize,
     take: q.pageSize,
@@ -111,6 +115,7 @@ readerApp.get('/blocked', async (c) => {
   const total = await prisma.reader.count({ where });
   const items = await prisma.reader.findMany({
     where,
+    select: readerListSelect,
     orderBy: { blockedAt: 'desc' },
     skip: (q.page - 1) * q.pageSize,
     take: q.pageSize,
@@ -169,7 +174,16 @@ readerApp.get('/:id', async (c) => {
   ]);
   const activeLoans = loans.filter((l) => l.status !== 'RETURNED');
   const overdueCount = loans.filter((l) => l.status === 'OVERDUE').length;
-  return c.json({ reader, loans, activeLoans, overdueCount, reservations });
+  // As assinaturas congeladas do empréstimo (`loanSignature`, `returnSignature`,
+  // snapshots) não são exibidas nesta tela — só `reader.signature` é usada, e ela
+  // vem no objeto `reader`, intacto. Sem isso a resposta carregava ~50 PNGs.
+  return c.json({
+    reader,
+    loans: stripLoanBlobsMany(loans),
+    activeLoans,
+    overdueCount,
+    reservations,
+  });
 });
 
 readerApp.put('/:id', async (c) => {

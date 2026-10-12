@@ -61,7 +61,9 @@ userRouter.get(
     const total = await prisma.user.count({ where });
     const items = await prisma.user.findMany({
       where,
-      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, signature: true, signatureUpdatedAt: true, signatureType: true, signatureText: true, rubricText: true, rubricImage: true, fontFamily: true },
+      // Sem as imagens da assinatura na listagem (PNG em base64, ~85 KB por
+      // usuário): o front busca `/users/:id` ao abrir o editor de assinatura.
+      select: { id: true, name: true, email: true, role: true, status: true, createdAt: true, signatureUpdatedAt: true, signatureType: true, signatureText: true, rubricText: true, fontFamily: true },
       orderBy: { name: 'asc' },
       skip: (q.page - 1) * q.pageSize,
       take: q.pageSize,

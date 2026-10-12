@@ -3,7 +3,8 @@ import type { BlockedReader, Paginated, Reader, ReaderDetail } from '@library/sh
 import { cleanPayload, type Params } from '../http';
 
 export const readersApi = {
-  list: (params?: Params) => api.get<Paginated<Reader>>('/readers', { params }).then((r) => r.data),
+  list: (params?: Params, signal?: AbortSignal) =>
+    api.get<Paginated<Reader>>('/readers', { params, signal }).then((r) => r.data),
   get: (id: number) => api.get<ReaderDetail>(`/readers/${id}`).then((r) => r.data),
   create: (v: Record<string, unknown>) =>
     api.post<Reader>('/readers', cleanPayload(v)).then((r) => r.data),

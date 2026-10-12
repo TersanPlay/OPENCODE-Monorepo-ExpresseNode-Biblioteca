@@ -1,11 +1,10 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { BookOpen, LogOut, Search, UserRound } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../../features/auth/auth-provider';
 import { useReaderSession } from '../../features/readers/reader-session';
-import { settingsApi } from '../../features/api';
-import type { LibrarySettings } from '../../types/api';
+import { useLibrarySettings } from '../../features/settings/use-library-settings';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,14 +42,7 @@ export function PublicNavbar() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-  const [settings, setSettings] = useState<LibrarySettings | null>(null);
-
-  useEffect(() => {
-    settingsApi
-      .get()
-      .then(setSettings)
-      .catch(() => setSettings(null));
-  }, []);
+  const settings = useLibrarySettings();
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -174,14 +166,7 @@ export function PublicNavbar() {
 }
 
 export function PublicFooter() {
-  const [settings, setSettings] = useState<LibrarySettings | null>(null);
-
-  useEffect(() => {
-    settingsApi
-      .get()
-      .then(setSettings)
-      .catch(() => setSettings(null));
-  }, []);
+  const settings = useLibrarySettings();
 
   const hasContact = Boolean(
     settings?.libraryHours || settings?.libraryEmail || settings?.libraryPhone,

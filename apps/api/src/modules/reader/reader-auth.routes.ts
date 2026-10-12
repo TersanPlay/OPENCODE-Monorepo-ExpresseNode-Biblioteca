@@ -8,6 +8,7 @@ import { publicReader, requireReader, signReaderToken } from '../../lib/reader-a
 import { writeAudit } from '../../lib/audit';
 import { expireReservations, MS_PER_DAY } from '../../lib/overdue';
 import { refreshOverdue } from '../../lib/overdue';
+import { stripLoanBlobsMany } from '../../lib/strip-signature-blobs';
 import { env } from '../../config/env';
 import { passwordResetEmail, sendEmail } from '../../lib/mail';
 import { consumeResetToken, createResetToken } from '../../lib/password-reset';
@@ -261,7 +262,7 @@ readerAuthRouter.get(
     });
     const activeLoans = loans.filter((l) => l.status !== 'RETURNED');
     const overdueCount = loans.filter((l) => l.status === 'OVERDUE').length;
-    res.json({ loans, activeLoans, overdueCount });
+    res.json({ loans: stripLoanBlobsMany(loans), activeLoans, overdueCount });
   }),
 );
 

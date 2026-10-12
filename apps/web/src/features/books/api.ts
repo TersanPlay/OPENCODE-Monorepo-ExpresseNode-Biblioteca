@@ -29,14 +29,15 @@ function toBookPayload(v: BookFormValues) {
 }
 
 export const booksApi = {
-  list: (params?: Params) => api.get<Paginated<Book>>('/books', { params }).then((r) => r.data),
+  list: (params?: Params, signal?: AbortSignal) =>
+    api.get<Paginated<Book>>('/books', { params, signal }).then((r) => r.data),
   get: (id: number) => api.get<Book>(`/books/${id}`).then((r) => r.data),
   create: (v: BookFormValues) => api.post<Book>('/books', toBookPayload(v)).then((r) => r.data),
   update: (id: number, v: BookFormValues) =>
     api.put<Book>(`/books/${id}`, toBookPayload(v)).then((r) => r.data),
   archive: (id: number) => api.delete(`/books/${id}`).then((r) => r.data),
   restore: (id: number) => api.patch(`/books/${id}/restore`).then((r) => r.data),
-  cover: (isbn: string) =>
+  cover: (isbn: string, signal?: AbortSignal) =>
     api
       .get<{
         coverUrl: string;
@@ -49,12 +50,13 @@ export const booksApi = {
         pages: number | null;
         authors: string[];
         categories: string[];
-      }>('/books/cover', { params: { isbn } })
+      }>('/books/cover', { params: { isbn }, signal })
       .then((r) => r.data),
-  exists: (isbn: string, excludeId?: number) =>
+  exists: (isbn: string, excludeId?: number, signal?: AbortSignal) =>
     api
       .get<{ book: BookRef | null }>('/books/exists', {
         params: { isbn, ...(excludeId ? { exclude: excludeId } : {}) },
+        signal,
       })
       .then((r) => r.data),
 };

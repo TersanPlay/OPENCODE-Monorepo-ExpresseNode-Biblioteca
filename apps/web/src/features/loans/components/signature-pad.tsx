@@ -53,18 +53,31 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(fu
     };
     const resize = () => {
       const ratio = Math.max(window.devicePixelRatio || 1, 1);
-      canvas.width = Math.max(1, Math.floor(wrap.clientWidth * ratio));
-      canvas.height = Math.floor(heightRef.current * ratio);
+      const nextWidth = Math.max(1, Math.floor(wrap.clientWidth * ratio));
+      const nextHeight = Math.floor(heightRef.current * ratio);
+      // Redimensionar o canvas apaga o traço (o bitmap é perdido ao mudar
+      // width/height). Só redimensiona quando o tamanho realmente mudou — antes,
+      // qualquer `resize` da janela (inclusive recalculo de layout do navegador)
+      // destruía a assinatura que o usuário estava fazendo.
+      if (canvas.width === nextWidth && canvas.height === nextHeight) return;
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
       canvas.getContext('2d')?.scale(ratio, ratio);
       pad.clear();
       sync();
     };
     resize();
     pad.addEventListener('endStroke', sync);
-    window.addEventListener('resize', resize);
+    let timer = 0;
+    const onWindowResize = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(resize, 150);
+    };
+    window.addEventListener('resize', onWindowResize);
     return () => {
+      window.clearTimeout(timer);
       pad.removeEventListener('endStroke', sync);
-      window.removeEventListener('resize', resize);
+      window.removeEventListener('resize', onWindowResize);
       padRef.current = null;
     };
   }, []);

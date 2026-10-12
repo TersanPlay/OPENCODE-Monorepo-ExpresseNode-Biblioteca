@@ -4,6 +4,8 @@ import { HttpError } from '../../lib/http-error';
 import { writeAudit } from '../../lib/audit';
 import { resolveBookMetadata } from '../../lib/cover';
 import { prismaOf } from '../db';
+import { stripLoanBlobsMany } from '../../lib/strip-signature-blobs';
+import { readerEmbedSelect } from '../../lib/reader-select';
 import { requireAuth } from '../auth';
 import { rateLimit } from '../rate-limit';
 import { clientIp, reqJson } from '../http';
@@ -230,7 +232,7 @@ bookApp.get('/:id', async (c) => {
   const [loans, activeLoans] = await Promise.all([
     prisma.loan.findMany({
       where: { bookId: id },
-      include: { reader: true, book: true, user: { select: { id: true, name: true } } },
+      include: { reader: { select: readerEmbedSelect }, book: true, user: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 10,
     }),
@@ -238,7 +240,13 @@ bookApp.get('/:id', async (c) => {
       where: { bookId: id, status: { in: ACTIVE_LOAN_STATUSES } },
     }),
   ]);
-  return c.json({ ...mapBook(book, activeLoans === 0), loans, hasActiveLoan: activeLoans > 0 });
+  return c.json({
+    ...mapBook(book, activeLoans === 0),
+    // A ficha do livro não exibe as assinaturas do empréstimo; sem o strip cada
+    // linha carregava ~20 KB de PNG em base64.
+    loans: stripLoanBlobsMany(loans),
+    hasActiveLoan: activeLoans > 0,
+  });
 });
 
 bookApp.post('/', requireAuth, async (c) => {

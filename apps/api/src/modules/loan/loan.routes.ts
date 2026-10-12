@@ -9,6 +9,7 @@ import { writeAudit } from '../../lib/audit';
 import { computeDueDate, expireReservations, refreshOverdue } from '../../lib/overdue';
 import { getSettings } from '../../lib/settings';
 import { stripLoanBlobsMany, stripReaderBlobs } from '../../lib/strip-signature-blobs';
+import { readerEmbedSelect } from '../../lib/reader-select';
 import { generateBatchReturnTermPDF, generateLoanTermPDF, generateReturnTermPDF } from '../../lib/terms';
 import { requireReader } from '../../lib/reader-auth';
 import { dateOrNull, listQuerySchema, loanBatchCreateSchema, loanCreateSchema, loanQuerySchema, loanReturnBatchSchema, loanReturnSchema, parse } from '../../validation';
@@ -16,7 +17,9 @@ import { dateOrNull, listQuerySchema, loanBatchCreateSchema, loanCreateSchema, l
 export const loanRouter = Router();
 
 export const loanInclude = {
-  reader: true,
+  // `select` explícito: sem `passwordHash` (credencial) e sem
+  // `signature`/`rubricImage` (PNG em base64, ~85 KB por leitor).
+  reader: { select: readerEmbedSelect },
   book: true,
   user: { select: { id: true, name: true } },
 };

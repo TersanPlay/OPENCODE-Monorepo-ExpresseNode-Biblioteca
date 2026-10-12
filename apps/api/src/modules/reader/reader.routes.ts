@@ -4,7 +4,8 @@ import { HttpError } from '../../lib/http-error';
 import { asyncHandler } from '../../middleware/async-handler';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { writeAudit } from '../../lib/audit';
-import { stripReaderBlobs } from '../../lib/strip-signature-blobs';
+import { stripLoanBlobsMany, stripReaderBlobs } from '../../lib/strip-signature-blobs';
+import { readerListSelect } from '../../lib/reader-select';
 import { cleanNull, dateOrNull, parse, paginationSchema, readerDeleteSchema, readerPasswordSchema, readerQuerySchema, readerSchema, readerSignatureSchema, readerStatusSchema, readerUpdateSchema } from '../../validation';
 import { refreshOverdue } from '../../lib/overdue';
 import { hashPassword } from '../../lib/password-hash';
@@ -103,7 +104,8 @@ readerRouter.get(
     const total = await prisma.reader.count({ where });
     const items = await prisma.reader.findMany({
       where,
-      orderBy: { blockedAt: 'desc' },
+      select: readerListSelect,
+    orderBy: { blockedAt: 'desc' },
       skip: (q.page - 1) * q.pageSize,
       take: q.pageSize,
     });
@@ -163,7 +165,9 @@ readerRouter.get(
     ]);
     const activeLoans = loans.filter((l) => l.status !== 'RETURNED');
     const overdueCount = loans.filter((l) => l.status === 'OVERDUE').length;
-    res.json({ reader, loans, activeLoans, overdueCount, reservations });
+    // Sem as assinaturas congeladas dos empréstimos (não exibidas aqui); o objeto
+    // `reader` continua completo — `return-detail.tsx` usa `reader.signature`.
+    res.json({ reader, loans: stripLoanBlobsMany(loans), activeLoans, overdueCount, reservations });
   }),
 );
 

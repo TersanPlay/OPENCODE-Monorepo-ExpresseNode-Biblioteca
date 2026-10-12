@@ -1,0 +1,9 @@
+# Assets com hash no nome: imutáveis por definição. Sem isto, cada visita
+# revalida (max-age=0) e baixa o JS inteiro de novo.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# Documento do SPA: sempre revalidado, para pegar deploys novos na hora.
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

@@ -9,6 +9,7 @@ import {
 } from '../../lib/password-hash';
 import { consumeResetToken, createResetToken } from '../../lib/password-reset';
 import { expireReservations, MS_PER_DAY, refreshOverdue } from '../../lib/overdue';
+import { stripLoanBlobsMany } from '../../lib/strip-signature-blobs';
 import { writeAudit } from '../../lib/audit';
 import { prismaOf } from '../db';
 import { loginLimiter } from '../rate-limit';
@@ -235,7 +236,7 @@ readerAuthApp.get('/me/loans', requireReader, async (c) => {
   });
   const activeLoans = loans.filter((l) => l.status !== 'RETURNED');
   const overdueCount = loans.filter((l) => l.status === 'OVERDUE').length;
-  return c.json({ loans, activeLoans, overdueCount });
+    return c.json({ loans: stripLoanBlobsMany(loans), activeLoans, overdueCount });
 });
 
 // --- Reservas próprias ---

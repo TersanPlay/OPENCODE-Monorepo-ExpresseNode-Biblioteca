@@ -11,6 +11,7 @@ import { PageSkeleton } from '../../../components/ui/skeleton';
 import { Textarea } from '../../../components/ui/textarea';
 import { settingsApi } from '../../api';
 import { useAsyncData } from '../../hooks/use-async-data';
+import { invalidateLibrarySettings } from '../use-library-settings';
 import { useApiToast } from '../../toast/toast-provider';
 import { apiErrorMessage } from '../../../lib/errors';
 import { cn } from '../../../lib/utils';
@@ -71,6 +72,7 @@ export function SettingsPage() {
     setBusy(true);
     try {
       await settingsApi.update(v);
+      invalidateLibrarySettings();
       toast.success('Configurações salvas', 'As regras passam a valer imediatamente.');
     } catch (err) {
       toast.error('Não foi possível salvar', apiErrorMessage(err));
