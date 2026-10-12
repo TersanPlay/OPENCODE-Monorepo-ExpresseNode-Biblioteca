@@ -53,14 +53,34 @@ Metodologia UI Architect ASJ: canvas `#F2F2F0`, primary `#087F8C`, superfícies 
 
 ## Worker + D1 (produção Cloudflare)
 
-- Entrada: `apps/api/src/worker.ts` (Hono) — monta `/api/health`, `/api/auth`, `/api/users`, `/api/readers` (portal), `/api/settings`; demais módulos (`reader` balcão, `loan`, `book`, `report`, `reservation`, `audit`, `dashboard`, `category`, `author`, `label`, `backup`) em portagem.
-- `apps/api/src/worker/`: `env.ts` (vars/secrets + defaults iguais ao Express), `context.ts` (tipos `AppEnv`), `db.ts` (Prisma por requisição via binding `DB`), `http.ts` (`reqJson`, `clientIp`), `errors.ts` (mesmo mapa de erros do Express), `auth.ts` (JWT `jose`, `publicReader`), `rate-limit.ts` (janela deslizante), `mail.ts` (stub `503` até provedor HTTP), `modules/` (portagens).
+- Entrada: `apps/api/src/worker.ts` (Hono) — monta `/api/health` e os 15 domínios: `auth`, `users`, `readers` (portal + balcão), `books`, `reservations`, `loans`, `reports`, `labels`, `settings`, `audit`, `dashboard`, `categories`, `authors`, `backups`.
+- `apps/api/src/worker/`: `env.ts` (vars/secrets + defaults iguais ao Express), `context.ts` (tipos `AppEnv`), `db.ts` (Prisma por requisição via binding `DB`), `http.ts` (`reqJson`, `clientIp`), `errors.ts` (mesmo mapa de erros do Express), `auth.ts` (JWT `jose`, `publicReader`), `rate-limit.ts` (janela deslizante), `mail.ts` (Email Sending via binding `EMAIL`), `modules/` (portagens dos 15 domínios).
 - O código Express (`app.ts`, `modules/`) segue intacto para o dev local — libs compartilhadas aceitam client injetável (`writeAudit`, `create/consumeResetToken`, `refreshOverdue`, `expireReservations`).
-- `apps/api/wrangler.jsonc`: worker `biblioteca-api`, `compatibility_date` atual, `compatibility_flags: ["nodejs_compat"]`, binding `DB` → D1 `biblioteca-publica`, `migrations_dir: prisma/migrations` (+ `migrations_pattern` p/ layout `0001_init/migration.sql`), observability (logs + traces).
+- `apps/api/wrangler.jsonc`: worker `biblioteca-api`, `compatibility_date` atual, `compatibility_flags: ["nodejs_compat"]`, bindings `DB` → D1 `biblioteca-publica`, `BACKUPS` → R2 `biblioteca-backups`, `EMAIL` → Email Sending; `migrations_dir: prisma/migrations` (+ `migrations_pattern` p/ layout `0001_init/migration.sql`), observability (logs + traces).
 - Banco: `prisma/migrations/0001_init/migration.sql` gerado via `prisma migrate diff --from-empty`; dados importados com datetimes em ISO-8601 (único formato legível no edge).
 - Typecheck duplo: `tsc --noEmit` (Express, exclui `src/worker`) + `tsc --noEmit -p tsconfig.worker.json` (Worker, `types: []`, inclui `worker-configuration.d.ts` gerado por `wrangler types`).
 - Dev local do Worker: `wrangler d1 migrations apply DB --local` + `wrangler dev --port 8787` (D1 local em `.wrangler/`, secrets em `.dev.vars` — ambos gitignored).
-- Deploy: segundo Worker (`biblioteca-api`, Root `apps/api`) + `VITE_API_URL` no web.
+
+### Produção (implantado)
+
+| Piece | Onde |
+| --- | --- |
+| Web (assets) | `https://biblioteca-publica-opencode-monorepo.tersandropbs.workers.dev` |
+| API (Hono+D1) | `https://biblioteca-api.tersandropbs.workers.dev` (`/api/*`) |
+| D1 | `biblioteca-publica` (`5fdd8892-2931-4325-8b15-fbfcc412eeff`) |
+| R2 | `biblioteca-backups` |
+
+- `JWT_SECRET` é **secret** (`wrangler secret put JWT_SECRET --name biblioteca-api`); o pepper de senha deriva dele (`${JWT_SECRET}#pepper`) — trocar o secret invalida senhas e sessões.
+- O resto vai em `vars` no `wrangler.jsonc` (versionado): `JWT_EXPIRES`, `CORS_ORIGIN`, `FRONTEND_URL`, `MAIL_FROM`.
+- Deploy da API (a partir de `apps/api`): `pnpm exec wrangler deploy`.
+- Deploy do web: build com a URL da API embutida e upload de assets a partir de `apps/api` (o wrangler está lá):
+  ```
+  cd apps/web && VITE_API_URL=https://biblioteca-api.tersandropbs.workers.dev/api pnpm build
+  cd ../api && pnpm exec wrangler deploy -c ../web/wrangler.toml
+  ```
+  `VITE_API_URL` é embutido no bundle em build time — trocar a URL exige rebuild.
+- `wrangler login` (OAuth, device flow) é o pré-requisito de deploy; o `cf` CLI não lê `wrangler.jsonc` e não serve para o upload dos módulos.
+- E-mail: exige sending domain habilitada no dashboard (zone `legismemory.com`) + DNS validado. Sem isso a recuperação de senha responde `503` (`E_SENDER_DOMAIN_NOT_CONFIGURED`) — o token OAuth disponível não tem permissão de zona para automatizar esse onboarding.
 
 ### Regra de ícones do sidebar (`AdminLayout`)
 
