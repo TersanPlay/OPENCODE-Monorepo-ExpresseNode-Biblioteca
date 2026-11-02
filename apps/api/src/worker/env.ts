@@ -17,6 +17,9 @@ export interface WorkerEnv {
   CORS_ORIGIN?: string;
   FRONTEND_URL?: string;
   MAIL_FROM?: string;
+  ISBNDB_API_KEY?: string;
+ISBNDB_DELAY_MS?: string;
+  ISBNDB_BULK_SIZE?: string;
 }
 
 function requiredEnv(env: WorkerEnv, name: 'JWT_SECRET'): string {
@@ -53,4 +56,16 @@ export function corsOrigins(env: WorkerEnv): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+export function isbndbApiKey(env: WorkerEnv): string | null {
+  return env.ISBNDB_API_KEY?.trim() || null;
+}
+
+export function isbndbDelayMs(env: WorkerEnv): string | undefined {
+  return env.ISBNDB_DELAY_MS;
+}
+
+export function isbndbBulkSize(env: WorkerEnv): string | undefined {
+  return env.ISBNDB_BULK_SIZE;
 }

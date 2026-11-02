@@ -4,10 +4,7 @@ import type { Params } from '../http';
 
 export const categoriesApi = {
   list: (params?: Params) => api.get<Paginated<Category>>('/categories', { params }).then((r) => r.data),
-  all: (includeInactive = false) =>
-    api
-      .get<Paginated<Category>>('/categories', { params: includeInactive ? { all: 1 } : {} })
-      .then((r) => r.data.items),
+  all: () => api.get<Paginated<Category>>('/categories', { params: { all: 1 } }).then((r) => r.data.items),
   create: (v: { name: string; description?: string }) =>
     api.post<Category>('/categories', v).then((r) => r.data),
   update: (id: number, v: { name: string; description?: string }) =>

@@ -18,6 +18,7 @@ import { labelApp } from './worker/modules/label';
 import { settingsApp } from './worker/modules/settings';
 import { dashboardApp } from './worker/modules/dashboard';
 import { auditApp } from './worker/modules/audit';
+import { catalogUpdateApp } from './worker/modules/catalog-update';
 import type { AppEnv } from './worker/context';
 
 const app = new Hono<AppEnv>();
@@ -51,6 +52,7 @@ app.route('/api/authors', authorApp);
 app.route('/api/categories', categoryApp);
 app.route('/api/dashboard', dashboardApp);
 app.route('/api/audit', auditApp);
+app.route('/api/catalog-update', catalogUpdateApp);
 
 app.notFound(notFound);
 app.onError(onError);

@@ -114,6 +114,37 @@ Código real organizado por domínio: `api.ts` (clientes HTTP) + `pages/` (pági
 ### `types/api.ts`
 Reexporta `@library/shared`. Os tipos canônicos (`Book`, `Loan`, `Reader`, `ReaderDetail`, `BlockedReader`, `Reservation`, `User`, `Category`, `Author`, `AuditLog`, `ReportResult`, `LibrarySettings`, `DashboardData`, `Backup`, `Paginated<T>` etc.) vivem em `packages/shared/src/` junto dos schemas Zod.
 
+## Atualização cadastral (ISBNdb)
+
+Lógica única compartilhada por Express, Worker e CLI em `apps/api/src/lib/catalog-update/`:
+
+- `isbn.ts` — seleção (prioriza ISBN-13, alternativa ISBN-10), validação e equivalência;
+- `isbndb-client.ts` — `GET /book/{isbn}` com timeout, retentativas e `Retry-After`;
+- `language.ts` — normalização de ISO 639-3 para o texto em português usado no sistema;
+- `mapper.ts` — proposta de alterações (regras de não sobrescrita) + detecção de conflito;
+- `analysis.ts` — classificação do acervo, filtros e paginação;
+- `reports.ts` — Markdown de livros sem ISBN e de ISBNs inválidos;
+- `service.ts` — casos de uso (análise, simulação, aplicação, relatórios);
+- `runner.ts` — execução em lote com progresso e aplicação transacional por livro;
+- `jobs.ts` + `store.ts` + `store-file.ts`/`store-r2.ts` — progresso dos jobs em filesystem/R2.
+
+A **fonte da verdade por livro** são as colunas persistidas em `Book` (`catalogUpdateStatus`,
+`catalogUpdatedAt`, `catalogUpdateSource`, `catalogUpdateMessage`, `catalogUpdateFields`,
+`catalogUpdateJobId`) — criadas pela migração aditiva `0002_catalog_update_state`. Simulação não
+grava estado; a aplicação grava `UPDATED` (com campos), `UNCHANGED`, `NOT_FOUND` ou `ERROR`.
+A listagem usa `state=PENDING|UPDATED|MISSING_ISBN`, alimentando as três abas da página
+(Pendentes por padrão, Atualizados e Sem ISBN); concluídos só são reconsultados via
+reprocessamento manual (`bookIds`).
+
+Rotas: `apps/api/src/modules/catalog-update/catalog-update.routes.ts` (Express) e
+`apps/api/src/worker/modules/catalog-update.ts` (Hono), montadas em `/api/catalog-update`.
+CLI: `apps/api/scripts/update-catalog-isbndb.ts` (`catalog:update`) e
+`apps/api/scripts/backfill-catalog-state.ts` (`catalog:backfill`, dry-run opcional para importar
+evidência de jobs `APPLY/COMPLETED` antigos).
+
+Frontend: `apps/web/src/features/catalog-update/` (`api.ts` + página), rota
+`/admin/atualizacao-cadastral` (ADMIN) e item “Atualização cadastral” em Acervo.
+
 ## Mapa no monorepo (apps/api, apps/web, packages)
 
 - Backend por domínio: `apps/api/src/modules/<dominio>/<dominio>.routes.ts` (Express; mesmas rotas e regras). Espelho Worker em `apps/api/src/worker/modules/` (Hono; portados: `auth`, `user`, `reader-auth`, `settings` — demais em portagem), montados em `apps/api/src/worker.ts` sob os mesmos prefixos `/api/*`.

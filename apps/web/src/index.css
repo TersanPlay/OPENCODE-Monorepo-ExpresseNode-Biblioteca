@@ -72,6 +72,15 @@
   .anim-note {
     animation: anim-note 2.4s ease-in-out infinite;
   }
+  .anim-orbit {
+    animation: anim-orbit 2.6s linear infinite;
+  }
+  .anim-shimmer {
+    animation: anim-shimmer 1.7s ease-in-out infinite;
+  }
+  .anim-float {
+    animation: anim-float 5s ease-in-out infinite;
+  }
   .reveal {
     opacity: 0;
     transform: translateY(14px);
@@ -136,10 +145,40 @@
   }
 }
 
+@keyframes anim-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes anim-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes anim-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-10px);
+    opacity: 0.7;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .anim-flow,
   .anim-flow-rev,
-  .anim-note {
+  .anim-note,
+  .anim-orbit,
+  .anim-shimmer,
+  .anim-float {
     animation: none;
   }
 }

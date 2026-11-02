@@ -308,6 +308,55 @@ Backups automáticos: dois agendamentos diários via `node-cron` (18:30 e 23:45)
 
 ---
 
+## Atualização cadastral (ISBNdb) — `ADMIN` apenas
+
+Consulta metadados na ISBNdb v2 e atualiza livros já cadastrados. O fluxo é
+**análise → simulação (dry-run) → aplicação confirmada**. A chave `ISBNDB_API_KEY`
+fica somente no backend (header `Authorization`), nunca no navegador.
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/api/catalog-update/analysis` | Contadores: total, ISBN válido, sem ISBN, inválidos, pendentes, concluídos, atualizados, sem alterações, não encontrados, erros + `apiConfigured` |
+| GET | `/api/catalog-update/books` | Lista paginada por aba (`state=PENDING\|UPDATED\|MISSING_ISBN`) e filtros (`status`, `search`, `page`, `pageSize`) |
+| POST | `/api/catalog-update/simulate` | Inicia simulação assíncrona (202). Corpo: `{ limit?, bookIds?, delayMs? }` |
+| POST | `/api/catalog-update/apply` | Aplica a simulação (202). Corpo: `{ simulationId, confirm: true }` |
+| POST | `/api/catalog-update/jobs/:id/stop` | Para o processamento (202). Em simulação, aplica os resultados já obtidos; em aplicação, interrompe os registros restantes |
+| GET | `/api/catalog-update/jobs/:id` | Resumo/progresso da execução (polling) |
+| GET | `/api/catalog-update/jobs/:id/rows` | Linhas da execução (`result`, `onlyChanges`, `search`, `page`, `pageSize`) |
+| GET | `/api/catalog-update/reports/livros-sem-isbn` | Relatório Markdown em JSON; `?download=1` baixa o arquivo |
+| GET | `/api/catalog-update/reports/isbns-invalidos` | Relatório de ISBNs inválidos; `?download=1` baixa o arquivo |
+
+Resposta de `POST /simulate` (202):
+
+```json
+{ "job": { "id": "uuid", "mode": "SIMULATE", "status": "RUNNING", "total": 50, "processed": 0 } }
+```
+
+- `limit` ausente/`null` = todos os livros **pendentes** com ISBN válido (máx. 10.000). Livros já
+  concluídos (`UPDATED`/`UNCHANGED`) só entram via `bookIds` (reprocessamento manual explícito).
+- `delayMs` padrão vem de `ISBNDB_DELAY_MS` (1100). O cliente respeita `Retry-After` em 429/503
+  e o `ratelimit` (`t=`) devolvido pela ISBNdb.
+- `simulate` consulta `GET /key` (não consome cota) para detectar plano/saldo, usa o endpoint
+  bulk (`POST /books`, até 100 no Basic; `ISBNDB_BULK_SIZE` sobrescreve) e limita o processamento
+  ao saldo diário restante. O progresso inclui `planName`, `bulkSize`, `quotaRemaining`,
+  `httpRequests` e `apiCalls` (cota consumida).
+- Simulação **não** grava estado no livro: apenas a aplicação persiste em
+  `Book.catalogUpdateStatus` (`UPDATED`, `UNCHANGED`, `NOT_FOUND`, `ERROR`), `catalogUpdatedAt`,
+  `catalogUpdateSource`, `catalogUpdateMessage`, `catalogUpdateFields` e `catalogUpdateJobId`.
+- `apply` exige `confirm: true`, recusa simulação inexistente/incompleta (`404`/`409`) e registra
+  todos os resultados da simulação (inclusive `UNCHANGED`, `NOT_FOUND` e `ERROR`). Livros alterados
+  desde a simulação retornam `applyStatus: "CONFLICT"` e não são sobrescritos; falhas não marcam
+  o livro como atualizado.
+- `state=UPDATED` abrange concluídos (`Atualizado` e `Sem alterações`); `state=PENDING` inclui
+  nunca processados, ISBN inválido, não encontrados e erros, com `pendingReason`.
+- `stop` interrompe após o lote (consulta bulk) ou registro atual. Numa simulação, os resultados
+  já coletados são aplicados/registrados e a execução termina `COMPLETED` com `applied: true`,
+  `cancelRequested: true` e contadores parciais; livros não consultados permanecem pendentes.
+- `CDD`, `Cutter`, categorias, subtítulo, volume e vínculos administrativos nunca são alterados.
+- O progresso dos jobs fica em `backups/.catalog-updates/` (Express) e no R2 `BACKUPS` (Worker);
+  o estado por livro (fonte da verdade) fica no banco.
+- Sem `ISBNDB_API_KEY`, `simulate` responde `503`; análise, abas e relatórios continuam disponíveis.
+
 ## Conformidade frontend × backend
 
 Mapeamento vigente (`apps/web/src/features/<dominio>/api.ts`): `PATCH /authors/:id/status` (`{ isActive }`),

@@ -5,32 +5,55 @@ import { writeAudit } from '../../lib/audit';
 import { prismaOf } from '../db';
 import { requireAuth, requireRoles } from '../auth';
 import { clientIp, reqJson } from '../http';
-import { categorySchema, categoryStatusSchema, cleanNull, parse } from '../../validation';
+import { categorySchema, categoryStatusSchema, cleanNull, listQuerySchema, parse } from '../../validation';
 import type { AppContext, AppEnv } from '../context';
 
 export const categoryApp = new Hono<AppEnv>();
 
-// Lista pública; com ?all=1 exige auth e inclui inativas.
+// ?all=1 é público (dropdowns/catálogo); a listagem paginada exige staff.
 const maybeAuth = createMiddleware<AppEnv>(async (c, next) => {
   const appC = c as AppContext;
-  if (appC.req.query('all') === '1') return requireAuth(appC, next);
-  await next();
+  if (appC.req.query('all') === '1') return next();
+  return requireAuth(appC, next);
 });
 
 categoryApp.get('/', maybeAuth, async (c) => {
   const prisma = prismaOf(c);
-  const includeInactive = c.req.query('all') === '1' && !!c.get('user');
+  if (c.req.query('all') === '1') {
+    const items = await prisma.category.findMany({
+      where: { status: 'ACTIVE' },
+      include: { _count: { select: { bookLinks: true } } },
+      orderBy: { name: 'asc' },
+    });
+    return c.json({
+      items: items.map((cat) => ({ ...cat, _count: { books: cat._count.bookLinks } })),
+      total: items.length,
+      page: 1,
+      pageSize: items.length,
+      totalPages: 1,
+    });
+  }
+
+  const q = parse(listQuerySchema, c.req.query());
+  const where = {
+    ...(q.search ? { name: { contains: q.search } } : {}),
+    ...(q.status === 'active' ? { status: 'ACTIVE' as const } : {}),
+    ...(q.status === 'inactive' ? { status: 'INACTIVE' as const } : {}),
+  };
+  const total = await prisma.category.count({ where });
   const items = await prisma.category.findMany({
-    where: includeInactive ? {} : { status: 'ACTIVE' },
+    where,
     include: { _count: { select: { bookLinks: true } } },
     orderBy: { name: 'asc' },
+    skip: (q.page - 1) * q.pageSize,
+    take: q.pageSize,
   });
   return c.json({
     items: items.map((cat) => ({ ...cat, _count: { books: cat._count.bookLinks } })),
-    total: items.length,
-    page: 1,
-    pageSize: items.length,
-    totalPages: 1,
+    total,
+    page: q.page,
+    pageSize: q.pageSize,
+    totalPages: Math.ceil(total / q.pageSize),
   });
 });
 

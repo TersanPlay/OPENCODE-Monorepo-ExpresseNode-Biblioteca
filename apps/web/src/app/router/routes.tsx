@@ -31,6 +31,7 @@ import { ProfilePage } from '../../pages/admin/profile';
 import { SettingsPage } from '../../pages/admin/settings';
 import { AuditPage } from '../../pages/admin/audit';
 import { BackupsPage } from '../../pages/admin/backups';
+import { CatalogUpdatePage } from '../../pages/admin/catalog-update';
 import { BlockListPage } from '../../pages/admin/blocklist';
 import { NotFoundPage } from '../../pages/not-found';
 
@@ -77,6 +78,7 @@ export function AppRoutes() {
             <Route path="admin/configuracoes" element={<SettingsPage />} />
             <Route path="admin/auditoria" element={<AuditPage />} />
             <Route path="admin/backup" element={<BackupsPage />} />
+            <Route path="admin/atualizacao-cadastral" element={<CatalogUpdatePage />} />
           </Route>
         </Route>
       </Route>

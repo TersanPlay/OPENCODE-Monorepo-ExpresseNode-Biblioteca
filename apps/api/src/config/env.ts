@@ -57,6 +57,15 @@ export const env = {
       .map((s) => s.trim().replace(/\/$/, ''))
       .filter(Boolean)[0] as string;
   },
+  get ISBNDB_API_KEY(): string | null {
+    return process.env.ISBNDB_API_KEY?.trim() || null;
+  },
+  get ISBNDB_DELAY_MS(): string | undefined {
+    return process.env.ISBNDB_DELAY_MS;
+  },
+  get ISBNDB_BULK_SIZE(): string | undefined {
+    return process.env.ISBNDB_BULK_SIZE;
+  },
 };
 
 export function jwtSecret(): string {

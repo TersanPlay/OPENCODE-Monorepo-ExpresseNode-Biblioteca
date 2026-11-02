@@ -114,7 +114,35 @@ Esse comando:
 1. Cria o arquivo `dev.db` (SQLite) com o schema do Prisma
 2. Roda o seed que cria a configuração inicial e o usuário administrador (usando as variáveis `ADMIN_EMAIL`/`ADMIN_PASSWORD` do `.env`)
 
-#### 2.4 Iniciar o servidor
+#### 2.4 Restaurar um backup (opcional)
+
+Se você já tem um arquivo em `apps/api/backups`, restaure **nesta ordem** (PowerShell):
+
+```powershell
+# 1. Backup de segurança do banco atual
+Copy-Item apps/api/prisma/dev.db "apps/api/backups/pre-restore-$(Get-Date -Format yyyy-MM-dd).sqlite" -Force
+
+# 2. Copiar o backup escolhido por cima do dev.db
+Copy-Item "apps/api/backups/backup_2026-08-26_19-58.sqlite" apps/api/prisma/dev.db -Force
+
+# 3. Remover journals antigos (evita estado inconsistente)
+Remove-Item apps/api/prisma/dev.db-wal, apps/api/prisma/dev.db-shm, apps/api/prisma/dev.db-journal -Force -ErrorAction SilentlyContinue
+
+# 4. Adequar o banco ao schema atual (backups antigos podem ter tabelas/colunas diferentes)
+pnpm --filter @library/api exec prisma db push --accept-data-loss
+
+# 5. Redefinir a senha do admin com o ADMIN_PASSWORD do .env
+pnpm --filter @library/api admin:reset
+```
+
+> Em bash/macOS, troque `Copy-Item`/`Remove-Item` por `cp`/`rm`.
+>
+> `--accept-data-loss` remove tabelas legadas que não existem mais no `schema.prisma`
+> (ex.: `KnowledgeArea`/`BookKnowledgeArea`). Se o backup já usar o schema atual, o passo 4
+> não altera dados. O passo 5 é necessário quando a senha do `.env` não corresponde ao hash
+> salvo no backup (hashes bcrypt antigos são aceitos, mas o login pode falhar se a senha mudou).
+
+#### 2.5 Iniciar o servidor
 
 ```bash
 # raiz: sobe API + web juntos
@@ -182,6 +210,11 @@ O frontend estará disponível em: **http://localhost:5173**
 | `pnpm db:setup` | Cria banco + aplica schema + roda seed |
 | `pnpm db:push` | Aplica mudanças do schema sem seed |
 | `pnpm db:seed` | Roda apenas o seed (cria admin se `.env` configurado) |
+| `pnpm admin:reset` | Redefine a senha do admin (`ADMIN_EMAIL`) com o `ADMIN_PASSWORD` do `.env` |
+| `pnpm catalog:update` | Simula (dry-run) a atualização cadastral via ISBNdb e gera os relatórios |
+| `pnpm catalog:update -- --apply --yes` | Aplica as alterações simuladas (confirmação explícita) |
+| `pnpm catalog:backfill` | Importa estado de jobs APPLY antigos (dry-run; `-- --apply` grava) |
+| `pnpm test:catalog-update` | Testes unitários de ISBN, mapeamento, conflitos e relatórios |
 | `pnpm smoke` | Executa a suíte de testes E2E (62 casos) |
 | `pnpm typecheck` | Verifica tipos sem gerar output |
 
@@ -260,6 +293,146 @@ O SQLite é **case-sensitive** para buscas com `contains`. Busque exatamente com
 Violação de unique constraint. Ex.: tentar cadastrar um livro com ISBN já existente ou um leitor com CPF já cadastrado.
 
 ---
+
+## Atualização cadastral via ISBNdb (script + painel)
+
+Consulta os metadados bibliográficos na **ISBNdb v2** usando o ISBN-13 (ou ISBN-10 como
+alternativa) de livros já cadastrados. O fluxo é sempre **simular → revisar → aplicar**:
+
+- nenhum livro é criado ou excluído;
+- só livros com ISBN válido são consultados;
+- ISBNs inválidos e livros sem ISBN vão para relatórios separados;
+- **CDD, Cutter, categorias, subtítulo, volume**, vínculos, histórico e dados administrativos
+  nunca são alterados;
+- a aplicação só grava as alterações previamente simuladas e marca **conflito** quando o livro
+  mudou desde a simulação (sem atualização parcial);
+- falhas individuais não interrompem o lote; erros 429/503 respeitam `Retry-After` e têm
+  retentativas limitadas;
+- o estado de cada livro é **persistido no banco** (`catalogUpdateStatus`, `catalogUpdatedAt`,
+  `catalogUpdateSource`, `catalogUpdateMessage`, `catalogUpdateFields`, `catalogUpdateJobId`):
+  simulação não conclui nada; a aplicação registra `Atualizado`, `Sem alterações`,
+  `Não encontrado` ou `Erro`. Execuções seguintes consultam apenas pendentes por padrão.
+
+### Limites da ISBNdb (plano Basic)
+
+| Recurso | Limite |
+|---|---|
+| Autenticação | Somente header `Authorization` (a chave nunca vai na query string) |
+| Rate | 1 requisição/segundo (headers `ratelimit-policy`, `ratelimit`) |
+| Cota diária | 5.000 ISBNs/dia; reset às **00:00 UTC**. `GET /key` consulta plano/saldo sem consumir cota |
+| Bulk | Até **100 ISBNs** por requisição (`POST /books`). Cada ISBN conta na cota diária |
+| Detalhe | `GET /book/{isbn}` = 1 ISBN, sem paginação |
+| Paginação | Detalhe/bulk não paginam; buscas aceitam `pageSize` ≤ 100 e teto de 10.000 resultados |
+| Nulos | Campos sem valor são **omitidos** (tratar chave ausente = `null`) |
+| Erros | `400`, `401`, `404`, `429`, `503`; `Retry-After` orienta a espera em `429`/`503` |
+
+Com ~4.858 pendentes no plano Basic: **≈49 requisições bulk** (100 ISBNs cada) respeitando
+1 req/s, mas **4.858 ISBNs da cota diária**. O job pré-checa `/key` e limita o lote ao saldo
+restante, evitando `429` diário no meio da execução. A simulação é sempre dry-run; quando
+“Aplicar automaticamente ao concluir” está ligado, o backend aplica os resultados ao final.
+
+### Configuração
+
+```env
+# apps/api/.env (Express) — no Worker use `wrangler secret put ISBNDB_API_KEY`
+ISBNDB_API_KEY=sua-chave-isbndb
+# Opcional: intervalo entre chamadas (ms). Padrão: 1100 (1 req/s no Basic)
+ISBNDB_DELAY_MS=1100
+# Opcional: ISBNs por requisição bulk (Basic 100 / Academic 10 / Pro+ 1000).
+# Vazio = detecta o plano via GET /key.
+ISBNDB_BULK_SIZE=100
+```
+
+A chave é enviada somente no header `Authorization` do backend; nunca vai ao navegador, logs ou
+relatórios. Cada livro consultado consome uma chamada da cota do plano.
+
+### Script (CLI)
+
+```bash
+# Gera apenas os relatórios Markdown (não consulta a ISBNdb)
+pnpm --filter @library/api catalog:update --reports-only
+
+# Simulação (dry-run): consulta apenas pendentes e não altera o banco
+pnpm --filter @library/api catalog:update --limit 50
+
+# Reprocessamento manual explícito de um livro já concluído
+pnpm --filter @library/api catalog:update --book 123 --delay 1500
+
+# Aplicar o que foi simulado (exige confirmação explícita)
+pnpm --filter @library/api catalog:update --limit 50 --apply --yes
+
+# Opcional: importar estado de jobs APPLY antigos (evidência de execuções
+# anteriores à persistência). Dry-run por padrão; use --apply para gravar.
+pnpm --filter @library/api catalog:backfill
+pnpm --filter @library/api catalog:backfill -- --apply
+```
+
+> O backfill só grava em livros ainda sem estado persistido e usa apenas jobs
+> `APPLY/COMPLETED` (nunca simulações), para não classificar livros antigos como
+> atualizados apenas por terem metadados preenchidos.
+
+Os relatórios são gravados em `relatorios/` na raiz:
+
+- `relatorios/livros-sem-isbn.md` — todos os livros sem ISBN-10/13, com ID, título, autores,
+  editora e ano (ordenado por título, "Não informado" quando vazio);
+- `relatorios/isbns-invalidos.md` — livros com ISBN informado porém inválido, com o motivo.
+
+Flags: `--limit N`, `--book ID` (repetível), `--delay MS`, `--apply`, `--yes`, `--json`,
+`--reports-only`, `--help`.
+
+### Painel administrativo
+
+Rota **`/admin/atualizacao-cadastral`** (somente `ADMIN`), no menu **Acervo → Atualização
+cadastral**. O painel permite:
+
+1. **Analisar acervo** — contadores de total, pendentes, atualizados, sem alterações, sem ISBN,
+   ISBN inválido, não encontrados e erros;
+2. três abas com tabela e contadores: **Pendentes** (padrão; inclui nunca processados, ISBN
+   inválido, não encontrados e erros, com o motivo), **Atualizados** (concluídos, separando
+   “Atualizado” de “Sem alterações”, com data/origem) e **Sem ISBN** (título, autores, editora;
+   fora da atualização automática);
+3. **Simular atualização** (dry-run) — por padrão só livros pendentes; limite e intervalo entre
+   chamadas; lotes bulk conforme o plano; progresso por polling e tabela de resultados. A opção
+   **“Aplicar automaticamente ao concluir”** executa a atualização completa em segundo plano
+   (a página acompanha o progresso e retoma o polling após recarregar). O botão dedicado
+   **Atualizar pendentes** inicia esse fluxo completo para todos os pendentes, com confirmação;
+4. abrir o **drawer** para comparar valores atuais × propostos ou consultar o histórico persistido;
+5. **Executar atualização** com confirmação explícita — aplica a simulação revisada e grava o
+   estado de cada livro; as abas e contadores são atualizados automaticamente. Durante a execução,
+   **Parar** interrompe após o lote atual e **aplica/registra os resultados já obtidos**,
+   mantendo pendentes os livros ainda não consultados;
+6. **Reprocessar** um livro concluído por ação explícita (cria nova simulação para revisão);
+7. baixar os relatórios Markdown; tudo permanece após recarregar a página ou reiniciar a aplicação.
+
+O script e o painel usam **o mesmo serviço** em `apps/api/src/lib/catalog-update/`
+(validação de ISBN, cliente ISBNdb, mapeamento, conflitos, aplicação e relatórios). O estado
+por livro fica no banco (fonte da verdade); o progresso dos jobs continua em
+`apps/api/backups/.catalog-updates/` (Express) e no R2 `BACKUPS` (Worker).
+
+### Migração
+
+A coluna de estado é aditiva (`prisma/migrations/0002_catalog_update_state`). Livros antigos
+ficam com status `NULL` (pendentes) até um processamento bem-sucedido — nenhum registro é
+marcado como atualizado apenas por já ter metadados.
+
+```bash
+# SQLite local
+pnpm --filter @library/api exec prisma db push
+
+# D1 (produção)
+cd apps/api && pnpm exec wrangler d1 migrations apply DB --remote
+```
+
+### Testes
+
+```bash
+pnpm --filter @library/api test:catalog-update
+pnpm --filter @library/api typecheck
+pnpm lint
+```
+
+Os testes cobrem validação/equivalência de ISBN, normalização de idioma/ano, regras de não
+sobrescrita, conflitos de simulação e geração dos relatórios — sem alterar o banco.
 
 ## Documentação completa
 

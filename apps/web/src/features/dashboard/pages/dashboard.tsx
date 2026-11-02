@@ -5,7 +5,6 @@ import {
   BookOpen,
   CalendarClock,
   TrendingUp,
-  Undo2,
   Users,
 } from 'lucide-react';
 import { useCallback } from 'react';
@@ -19,6 +18,7 @@ import { useAsyncData } from '../../hooks/use-async-data';
 import { useAuth } from '../../auth/auth-provider';
 import { formatDate } from '../../../lib/format';
 import { LoanStatusBadge } from '../../../components/ui/status-badge';
+import { TodayCalendar } from '../components/today-calendar';
 
 export function DashboardPage() {
   const { data, error, loading } = useAsyncData(useCallback(() => dashboardApi.get(), []));
@@ -243,34 +243,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card variant="blue">
-          <CardHeader>
-            <CardTitle>Atalhos rápidos</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2.5">
-            {[
-              { to: '/admin/emprestimos/novo', label: 'Registrar empréstimo', desc: 'Balcão de atendimento', icon: BookOpen },
-              { to: '/admin/devolucoes', label: 'Registrar devolução', desc: 'Receber livros de volta', icon: Undo2 },
-              { to: '/admin/leitores', label: 'Cadastrar leitor', desc: 'Novo usuário do acervo', icon: Users },
-              { to: '/admin/livros/novo', label: 'Cadastrar livro', desc: 'Ampliar o acervo', icon: BookOpen },
-            ].map((a) => (
-              <Link
-                key={a.to}
-                to={a.to}
-                className="group flex items-center gap-3 rounded-card bg-surface p-3.5 hairline transition-all duration-200 [transition-timing-function:var(--ease)] hover:-translate-y-0.5 hover:shadow-card active:scale-[.98]"
-              >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-control bg-primary-soft text-primary-dark">
-                  <a.icon className="size-[18px]" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-bold text-ink">{a.label}</span>
-                  <span className="block text-[12px] text-muted">{a.desc}</span>
-                </span>
-                <ArrowRight className="size-4 text-muted transition-transform duration-200 group-hover:translate-x-0.5" />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+        <TodayCalendar />
       </div>
     </div>
   );

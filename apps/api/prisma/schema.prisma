@@ -109,12 +109,22 @@ model Book {
   availableCopies   Int?
   acquisitionType   String?
   isArchived      Boolean      @default(false)
+  // Controle persistente da atualização cadastral via ISBNdb.
+  // Status: UPDATED | UNCHANGED | NOT_FOUND | ERROR (null = nunca processado).
+  catalogUpdateStatus  String?
+  catalogUpdatedAt     DateTime?
+  catalogUpdateSource  String?
+  catalogUpdateMessage String?
+  catalogUpdateFields  String?   // JSON array dos campos efetivamente gravados
+  catalogUpdateJobId   String?
   categories      BookCategory[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   authors         BookAuthor[]
   loans           Loan[]
   reservations    Reservation[]
+
+  @@index([catalogUpdateStatus])
 }
 
 model BookAuthor {

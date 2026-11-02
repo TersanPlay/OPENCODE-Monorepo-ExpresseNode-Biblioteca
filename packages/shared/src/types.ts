@@ -276,3 +276,143 @@ export interface BookFormValues {
   categories: { id: number | null; name: string }[];
   authors: { id: number | null; name: string }[];
 }
+
+// ---- Atualização cadastral via ISBNdb ----
+
+export type CatalogUpdateBookStatus = 'VALID_ISBN' | 'MISSING_ISBN' | 'INVALID_ISBN';
+
+export type CatalogUpdateQueryStatus =
+  | 'PENDING'
+  | 'FOUND'
+  | 'NOT_FOUND'
+  | 'ERROR'
+  | 'SKIPPED';
+
+export type CatalogUpdateApplyStatus =
+  | 'UPDATED'
+  | 'UNCHANGED'
+  | 'NOT_FOUND'
+  | 'SKIPPED'
+  | 'CONFLICT'
+  | 'ERROR';
+
+/** Resultado persistido do último processamento bem-sucedido na ISBNdb. */
+export type CatalogUpdateProcessStatus = 'UPDATED' | 'UNCHANGED' | 'NOT_FOUND' | 'ERROR';
+
+/** Aba/estado derivado do livro na página administrativa. */
+export type CatalogUpdateRowState = 'PENDING' | 'UPDATED' | 'MISSING_ISBN';
+
+export interface CatalogUpdateChange {
+  field: string;
+  label: string;
+  current: string | number | null;
+  next: string | number | null;
+}
+
+export interface CatalogUpdateAuthorChange {
+  current: string[];
+  next: string[];
+}
+
+export interface CatalogUpdateRow {
+  bookId: number;
+  title: string;
+  authors: string[];
+  publisher: string | null;
+  publicationYear: number | null;
+  isbn10: string | null;
+  isbn13: string | null;
+  isbnUsed: string | null;
+  status: CatalogUpdateBookStatus;
+  reason: string | null;
+  bookUpdatedAt: string;
+  queryStatus?: CatalogUpdateQueryStatus;
+  queryError?: string | null;
+  changes?: CatalogUpdateChange[];
+  authorChanges?: CatalogUpdateAuthorChange | null;
+applyStatus?: CatalogUpdateApplyStatus;
+  applyError?: string | null;
+  /** Estado persistido do último processamento (null = nunca processado). */
+  processStatus?: CatalogUpdateProcessStatus | null;
+  catalogUpdatedAt?: string | null;
+  catalogUpdateSource?: string | null;
+  catalogUpdateMessage?: string | null;
+  catalogUpdateFields?: string[];
+  catalogUpdateJobId?: string | null;
+  /** Aba a que o livro pertence: PENDING | UPDATED | MISSING_ISBN. */
+  rowState?: CatalogUpdateRowState;
+  /** Explicação de por que o livro continua pendente. */
+  pendingReason?: string | null;
+}
+
+export interface CatalogUpdateCounts {
+  totalBooks: number;
+  withValidIsbn: number;
+  withoutIsbn: number;
+  invalidIsbn: number;
+  pending: number;
+  completed: number;
+  updated: number;
+  unchanged: number;
+  notFound: number;
+  errors: number;
+}
+
+export interface CatalogUpdateAnalysis {
+  generatedAt: string;
+  counts: CatalogUpdateCounts;
+  apiConfigured: boolean;
+}
+
+export interface CatalogUpdateSimulationInfo {
+  id: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: CatalogUpdateJobStatus;
+  total: number;
+  found: number;
+  notFound: number;
+  errors: number;
+  changedBooks: number;
+}
+
+export type CatalogUpdateJobMode = 'SIMULATE' | 'APPLY';
+export type CatalogUpdateJobStatus = 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export interface CatalogUpdateJobSummary {
+  id: string;
+  mode: CatalogUpdateJobMode;
+  status: CatalogUpdateJobStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  userId: number | null;
+  simulationId: string | null;
+  total: number;
+  processed: number;
+found: number;
+  notFound: number;
+  skipped: number;
+  errors: number;
+  changedBooks: number;
+  updated: number;
+  unchanged: number;
+  conflicts: number;
+  apiCalls: number;
+  message: string | null;
+delayMs: number;
+  limit: number | null;
+  planName?: string | null;
+  bulkSize?: number;
+  httpRequests?: number;
+  quotaRemaining?: number | null;
+  phase?: 'QUERY' | 'APPLY';
+  applied?: boolean;
+  cancelRequested?: boolean;
+}
+
+export interface CatalogUpdateReportInfo {
+  filename: string;
+  title: string;
+  total: number;
+  generatedAt: string;
+}

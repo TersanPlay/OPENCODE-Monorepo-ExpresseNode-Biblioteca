@@ -1,0 +1,1 @@
+export * from '../../features/catalog-update/pages/catalog-update';

@@ -4,6 +4,7 @@ import {
   DoorOpen,
   LogOut,
   Menu,
+  RefreshCw,
   UserRound,
   X,
 } from 'lucide-react';
@@ -56,6 +57,7 @@ const navSections: {
     items: [
       { to: '/admin/livros', label: 'Livros', icon: FcLibrary, adminOnly: false },
       { to: '/admin/etiquetas', label: 'Etiquetas', icon: FcPrint, adminOnly: false },
+      { to: '/admin/atualizacao-cadastral', label: 'Atualização cadastral', icon: RefreshCw, adminOnly: true },
       { to: '/admin/autores', label: 'Autores', icon: FcPortraitMode, adminOnly: true },
       { to: '/admin/categorias', label: 'Categorias', icon: FcOpenedFolder, adminOnly: true },
     ],

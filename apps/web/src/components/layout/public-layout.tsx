@@ -235,9 +235,9 @@ export function PublicFooter() {
 
 export function PublicLayout() {
   return (
-    <div className="min-h-screen bg-canvasWarm">
+    <div className="flex min-h-screen flex-col bg-canvasWarm">
       <PublicNavbar />
-      <main className="pt-28">
+      <main className="flex-1 pt-28">
         <Outlet />
       </main>
       <PublicFooter />

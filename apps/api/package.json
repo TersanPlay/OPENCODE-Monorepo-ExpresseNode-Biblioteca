@@ -11,6 +11,10 @@
     "db:dedupe": "tsx scripts/dedupe-books.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:setup": "prisma db push && tsx prisma/seed.ts",
+    "admin:reset": "tsx scripts/reset-admin-password.ts",
+    "catalog:update": "tsx scripts/update-catalog-isbndb.ts",
+    "catalog:backfill": "tsx scripts/backfill-catalog-state.ts",
+    "test:catalog-update": "tsx scripts/test-catalog-update.ts",
     "postinstall": "prisma generate",
     "smoke": "tsx scripts/smoke.ts",
     "bench": "tsx scripts/bench.ts"
